@@ -1,0 +1,3536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Equipment Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  :root{
+    --bg:#F7F3EA;
+    --surface:#FFFFFF;
+    --ink:#1F2A28;
+    --ink-soft:#5F6B65;
+    --ink-faint:#8B958F;
+    --line:#E7E1D3;
+    --accent:#2F6F5E;
+    --accent-soft:#E4EFEC;
+    --accent-ink:#1E4A3E;
+    --transfer:#3E5C8A;
+    --transfer-soft:#E7ECF4;
+    --retain:#B08A2A;
+    --retain-soft:#F4EDD9;
+    --warn:#B8562B;
+    --warn-soft:#F5E5DB;
+    --decom:#6E7480;
+    --decom-soft:#EAEBED;
+    --nonfunc:#A6333F;
+    --nonfunc-soft:#F3E1E1;
+    --sidebar-bg:#16302B;
+    --sidebar-bg-soft:#1C3B34;
+    --sidebar-text:#ECEFEC;
+    --sidebar-text-dim:#8FA39A;
+    --sidebar-active:rgba(255,255,255,0.08);
+    --sidebar-line:rgba(255,255,255,0.09);
+    --radius:10px;
+    --sidebar-width:236px;
+  }
+  *{box-sizing:border-box;}
+  html, body{width:100%;height:100%;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .app-shell{display:flex;width:100%;min-height:100vh;}
+  .sidebar{
+    width:var(--sidebar-width);
+    flex-shrink:0;
+    background:var(--sidebar-bg);
+    color:var(--sidebar-text);
+    padding:22px 16px;
+    display:flex;
+    flex-direction:column;
+    gap:26px;
+  }
+  .sidebar-brand{display:flex;align-items:center;gap:10px;padding:0 6px 18px;border-bottom:1px solid var(--sidebar-line);}
+  .brand-mark{
+    width:30px;height:30px;border-radius:8px;flex-shrink:0;
+    background:linear-gradient(135deg, #4FA98C, #2C6F8E);
+  }
+  .brand-name{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14px;line-height:1.2;color:var(--sidebar-text);}
+  .brand-sub{font-size:11px;color:var(--sidebar-text-dim);margin-top:1px;}
+  .nav-section{display:flex;flex-direction:column;gap:2px;}
+  .nav-label{
+    font-size:10.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;
+    color:var(--sidebar-text-dim);padding:0 10px 6px;
+  }
+  .nav-item{
+    display:flex;align-items:center;gap:8px;
+    text-align:left;width:100%;
+    background:none;border:none;border-radius:7px;
+    color:var(--sidebar-text-dim);
+    font-family:'Inter',sans-serif;font-size:13.5px;font-weight:500;
+    padding:9px 10px;cursor:pointer;
+    border-left:3px solid transparent;
+  }
+  .nav-item:hover{background:var(--sidebar-active);color:var(--sidebar-text);}
+  .nav-item.active{background:var(--sidebar-active);color:var(--sidebar-text);border-left-color:var(--accent);font-weight:600;}
+  .nav-item.disabled{opacity:0.55;cursor:default;}
+  .nav-item.disabled:hover{background:none;color:var(--sidebar-text-dim);}
+  .nav-soon{
+    margin-left:auto;font-size:9.5px;font-weight:700;letter-spacing:0.04em;
+    background:rgba(255,255,255,0.1);color:var(--sidebar-text-dim);
+    padding:2px 6px;border-radius:5px;text-transform:uppercase;
+  }
+  .main-content{flex:1;min-width:0;padding:28px 40px 80px;}
+
+  @media (max-width: 760px){
+    .app-shell{flex-direction:column;}
+    .sidebar{width:100%;flex-direction:row;flex-wrap:wrap;padding:14px 12px;gap:12px;}
+    .sidebar-brand{border-bottom:none;padding:0;flex:1 1 100%;}
+    .nav-section{flex-direction:row;flex-wrap:wrap;gap:6px;}
+    .nav-label{display:none;}
+    .nav-item{width:auto;border-left:none;border-bottom:2px solid transparent;border-radius:6px 6px 0 0;}
+    .nav-item.active{border-left:none;border-bottom-color:var(--accent);}
+    .main-content{padding:20px 16px 60px;}
+    .stats{flex-direction:column;}
+    .stat{min-width:0;}
+    .toolbar{flex-direction:column;align-items:stretch;}
+    .toolbar input, .toolbar select, .toolbar button{width:100%;}
+  }
+  .breadcrumb{font-size:12px;color:var(--ink-faint);margin-bottom:8px;}
+  .breadcrumb b{color:var(--ink-soft);font-weight:600;}
+
+  /* HEADER */
+  header{margin-bottom:22px;}
+  .eyebrow{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--ink-faint);
+    margin-bottom:6px;
+  }
+  h1{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:30px;
+    font-weight:700;
+    margin:0 0 4px;
+    letter-spacing:-0.01em;
+  }
+  .sub{color:var(--ink-soft);font-size:14px;margin:0;}
+
+  /* STAT CHIPS */
+  .stats{display:flex;flex-wrap:wrap;gap:12px;margin-top:20px;}
+  .stat{
+    position:relative;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-left:4px solid var(--dot,var(--ink-faint));
+    border-radius:9px;
+    padding:14px 18px;
+    min-width:132px;
+    flex:1;
+  }
+  .stat .n{font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:700;display:block;line-height:1.15;}
+  .stat .l{font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:0.06em;margin-top:2px;display:block;}
+
+  /* TOOLBAR */
+  .toolbar{
+    display:flex;gap:10px;flex-wrap:wrap;
+    align-items:center;
+    margin:26px 0 14px;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:14px 16px;
+  }
+  input[type=text],select{
+    font-family:'Inter',sans-serif;
+    font-size:13.5px;
+    border:1px solid var(--line);
+    background:var(--surface);
+    border-radius:8px;
+    padding:9px 12px;
+    color:var(--ink);
+    outline:none;
+  }
+  input[type=text]{flex:1;min-width:180px;}
+  input[type=text]:focus,select:focus{border-color:var(--accent);}
+  .btn{
+    font-family:'Inter',sans-serif;
+    font-weight:600;
+    font-size:13.5px;
+    border:none;
+    border-radius:8px;
+    padding:9px 16px;
+    cursor:pointer;
+    transition:transform .08s ease, filter .12s ease;
+  }
+  .btn:active{transform:scale(0.97);}
+  .btn-primary{background:var(--ink);color:#fff;}
+  .btn-primary:hover{filter:brightness(1.15);}
+  .btn-ghost{background:transparent;border:1px solid var(--line);color:var(--ink);}
+  .btn-ghost:hover{background:var(--accent-soft);border-color:var(--accent);}
+  .btn-accent{background:var(--accent);color:#fff;}
+  .btn-accent:hover{filter:brightness(1.1);}
+  .btn-warn{background:var(--warn);color:#fff;}
+  .btn-warn:hover{filter:brightness(1.1);}
+  .btn-decom{background:var(--decom);color:#fff;}
+  .btn-decom:hover{filter:brightness(1.1);}
+  .btn-nonfunc{background:var(--nonfunc);color:#fff;}
+  .btn-nonfunc:hover{filter:brightness(1.1);}
+  .btn-sm{padding:6px 12px;font-size:12.5px;border-radius:7px;}
+
+  /* TABLE */
+  .table-card{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    overflow:hidden;
+  }
+  table{width:100%;border-collapse:collapse;}
+  thead th{
+    text-align:left;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    color:var(--ink-faint);
+    font-weight:600;
+    padding:12px 16px;
+    border-bottom:1px solid var(--line);
+    background:#FBFBFA;
+  }
+  tbody td{
+    padding:13px 16px;
+    border-bottom:1px solid var(--line);
+    font-size:13.5px;
+    vertical-align:middle;
+  }
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr{cursor:pointer;transition:background .1s ease;}
+  tbody tr:hover{background:#FAFBFA;}
+  .asset-id{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--ink-soft);}
+  .asset-name{font-weight:600;}
+  .asset-serial{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-faint);}
+
+  /* TAG BADGE (signature element: die-cut asset-tag shape) */
+  .tag{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    font-size:11.5px;
+    font-weight:600;
+    padding:5px 10px 5px 8px;
+    border-radius:3px;
+    position:relative;
+    white-space:nowrap;
+  }
+  .tag::before{
+    content:'';
+    width:6px;height:6px;
+    border-radius:50%;
+    background:currentColor;
+    box-shadow:0 0 0 2px currentColor inset;
+  }
+  .tag.available{background:var(--transfer-soft);color:var(--transfer);}
+  .tag.provided{background:var(--accent-soft);color:var(--accent-ink);}
+  .tag.retained{background:var(--retain-soft);color:var(--retain);}
+  .tag.damaged{background:var(--warn-soft);color:var(--warn);}
+  .tag.decommissioned{background:var(--decom-soft);color:var(--decom);}
+  .tag.nonfunctional{background:var(--nonfunc-soft);color:var(--nonfunc);}
+
+  .empty{padding:60px 20px;text-align:center;color:var(--ink-faint);}
+  .empty b{color:var(--ink-soft);display:block;font-size:15px;margin-bottom:4px;}
+
+  /* MODAL */
+  .overlay{
+    position:fixed;inset:0;background:rgba(20,24,30,0.45);
+    display:none;align-items:flex-start;justify-content:center;
+    padding:40px 16px;overflow-y:auto;z-index:50;
+  }
+  .overlay.show{display:flex;}
+  .modal{
+    background:var(--surface);
+    border-radius:14px;
+    width:100%;max-width:560px;
+    padding:26px 26px 22px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.2);
+  }
+  .modal h2{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:20px;margin:0 0 4px;
+  }
+  .modal .modal-sub{color:var(--ink-soft);font-size:13px;margin:0 0 18px;}
+  .field{margin-bottom:14px;}
+  .field label{
+    display:block;font-size:11.5px;font-weight:600;
+    text-transform:uppercase;letter-spacing:0.05em;
+    color:var(--ink-soft);margin-bottom:5px;
+  }
+  .field input,.field select,.field textarea{
+    width:100%;font-family:'Inter',sans-serif;font-size:13.5px;
+    border:1px solid var(--line);border-radius:8px;padding:9px 11px;
+    outline:none;color:var(--ink);
+  }
+  .field textarea{resize:vertical;min-height:56px;font-family:'Inter',sans-serif;}
+  .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent);}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px;}
+  .close-x{
+    position:absolute;top:16px;right:18px;
+    background:none;border:none;font-size:20px;color:var(--ink-faint);
+    cursor:pointer;line-height:1;
+  }
+  .modal{position:relative;}
+
+  /* DETAIL DRAWER */
+  .detail-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;}
+  .detail-meta{display:flex;gap:18px;flex-wrap:wrap;margin:14px 0 18px;padding:14px;background:#FAFBFA;border-radius:9px;border:1px solid var(--line);}
+  .detail-meta div{font-size:12.5px;}
+  .detail-meta .k{color:var(--ink-faint);text-transform:uppercase;letter-spacing:0.05em;font-size:10.5px;margin-bottom:3px;}
+  .detail-meta .v{font-weight:600;}
+  .actions-title{font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-soft);margin:18px 0 8px;}
+  .action-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
+
+  .timeline{border-top:1px solid var(--line);padding-top:14px;max-height:260px;overflow-y:auto;}
+  .tl-item{display:flex;gap:12px;margin-bottom:14px;}
+  .tl-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);margin-top:5px;flex-shrink:0;}
+  .tl-body b{font-size:13px;}
+  .tl-body .tl-meta{font-size:11.5px;color:var(--ink-faint);margin-top:2px;}
+  .tl-body .tl-note{font-size:12.5px;color:var(--ink-soft);margin-top:3px;}
+
+  .sub-form{background:#FAFBFA;border:1px solid var(--line);border-radius:9px;padding:14px;margin-bottom:16px;}
+  .sub-form .modal-actions{margin-top:12px;}
+
+  ::-webkit-scrollbar{width:8px;}
+  ::-webkit-scrollbar-thumb{background:#D8DAD6;border-radius:4px;}
+
+  /* VIEW TABS */
+  .view-tabs{display:flex;gap:4px;margin-top:20px;border-bottom:1px solid var(--line);}
+  .view-tab{
+    font-family:'Inter',sans-serif;font-weight:600;font-size:13.5px;
+    background:none;border:none;cursor:pointer;
+    padding:9px 4px;margin-right:20px;
+    color:var(--ink-faint);border-bottom:2px solid transparent;
+    transform:translateY(1px);
+  }
+  .view-tab.active{color:var(--ink);border-bottom-color:var(--accent);}
+
+  /* BULK QTY */
+  .qty{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:13.5px;}
+  .qty.zero{color:var(--ink-faint);font-weight:400;}
+  .qty-editor{display:flex;align-items:center;gap:10px;}
+  .qty-editor input{width:70px;}
+  .bucket-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0 18px;}
+  .bucket{background:#FAFBFA;border:1px solid var(--line);border-radius:9px;padding:10px 12px;}
+  .bucket .k{font-size:10.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-faint);}
+  .bucket .v{font-family:'Space Grotesk',sans-serif;font-size:19px;font-weight:700;}
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-mark"></div>
+      <div>
+        <div class="brand-name">GroundGame Health</div>
+        <div class="brand-sub">Equipment Ledger</div>
+      </div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Workspace</div>
+      <button class="nav-item active" id="tabOverview">Overview</button>
+      <button class="nav-item" id="tabScan">Scan</button>
+      <button class="nav-item" id="tabSerial">Laptop Inventory</button>
+      <button class="nav-item" id="tabNextP">Active Laptops (NP)</button>
+      <button class="nav-item" id="tabOnboard">Onboarding</button>
+      <button class="nav-item" id="tabOffboard">Offboarding</button>
+      <button class="nav-item" id="tabMonitors">Monitors</button>
+      <button class="nav-item" id="tabBulk">Bulk Stock</button>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Administration</div>
+      <div class="nav-item disabled">Access &amp; Roles <span class="nav-soon">Soon</span></div>
+      <div class="nav-item disabled">Import History <span class="nav-soon">Soon</span></div>
+    </div>
+    <div class="nav-section" style="margin-top:auto;">
+      <div class="nav-label">Data</div>
+      <button class="nav-item" id="btnExportData">Export backup</button>
+      <button class="nav-item" id="btnImportDataTrigger">Import backup</button>
+      <input type="file" id="importDataFile" accept="application/json" style="display:none;">
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <div class="breadcrumb">Equipment Ledger &rsaquo; <b id="crumbCurrent">Laptop Inventory</b></div>
+    <header>
+      <h1 id="pageTitle">Laptop Inventory</h1>
+      <p class="sub" id="pageDesc">Track every device from provisioning to decommission — one record, full history.</p>
+      <div class="stats" id="stats"></div>
+    </header>
+
+  <div id="overviewView">
+    <div class="stat" style="--dot:var(--ink);max-width:280px;margin-bottom:16px;">
+      <span class="n" id="ov_grandTotal" style="font-size:34px;">0</span>
+      <span class="l">Total equipment, company-wide</span>
+    </div>
+    <div class="actions-title" style="margin-top:6px;">By section</div>
+    <div class="stats" id="ov_sectionStats"></div>
+    <div class="actions-title" style="margin-top:22px;">Combined status — Laptop Inventory, Active Laptops (NP) &amp; Monitors</div>
+    <div class="stats" id="ov_statusStats"></div>
+  </div>
+
+  <div id="scanView" style="display:none;">
+    <div class="table-card" style="padding:22px;">
+      <p style="font-size:13px;color:var(--ink-soft);margin:0 0 16px;">Scan a physical barcode/QR tag with your device's camera. If it's already in the ledger, this jumps straight to that record; if not, it offers to add it with the serial pre-filled. <b>Requires opening this file directly in a browser — camera access won't work inside Claude's preview panel.</b></p>
+      <div id="scanReader" style="width:100%;max-width:520px;"></div>
+      <p id="scanHint" style="display:none;font-size:12.5px;color:var(--ink-faint);margin:10px 0 0;">Hold steady and fill the frame with the barcode — a little distance usually scans easier than very close up.</p>
+      <div class="modal-actions" style="justify-content:flex-start;margin-top:14px;">
+        <button class="btn btn-primary btn-sm" id="btnStartScan">Start camera</button>
+        <button class="btn btn-ghost btn-sm" id="btnStopScan" style="display:none;">Stop</button>
+      </div>
+      <div id="scanResult" style="margin-top:18px;"></div>
+
+      <div style="margin-top:24px;padding-top:18px;border-top:1px solid var(--line);max-width:420px;">
+        <div style="font-size:12.5px;font-weight:600;color:var(--ink-soft);margin-bottom:8px;">Camera not cooperating? Type it in instead</div>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="scanManualInput" placeholder="Enter serial manually..." style="flex:1;">
+          <button class="btn btn-ghost btn-sm" id="btnScanManual">Look up</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="serialView" style="display:none;">
+  <div class="toolbar">
+    <input type="text" id="search" placeholder="Search by name, ID, serial, or person...">
+    <select id="filterStatus">
+      <option value="">All statuses</option>
+      <option value="available">Available</option>
+      <option value="provided">Provided</option>
+      <option value="retained">Retained</option>
+      <option value="damaged">Damaged</option>
+      <option value="decommissioned">Decommissioned</option>
+      <option value="nonfunctional">Non-functional</option>
+    </select>
+    <select id="filterCategory">
+      <option value="">All categories</option>
+    </select>
+    <button class="btn btn-ghost" id="btnImport">Import list</button>
+    <button class="btn btn-primary" id="btnAdd">+ Add asset</button>
+  </div>
+
+  <div class="table-card">
+    <table>
+      <thead>
+        <tr>
+          <th>Asset</th><th>Category</th><th>Status</th><th>Assigned to</th><th>Location</th><th>Updated</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="empty" id="emptyState" style="display:none;">
+      <b>No assets yet</b>
+      Add your first piece of equipment to start the ledger.
+    </div>
+  </div>
+  </div>
+
+  <div id="nextpView" style="display:none;">
+    <div class="eyebrow" style="margin-top:20px;">Active Laptops (NP)</div>
+    <div class="stats" id="nextpStats"></div>
+    <div class="toolbar">
+      <input type="text" id="nextpSearch" placeholder="Search by name, ID, serial, or person...">
+      <select id="nextpFilterStatus">
+        <option value="">All statuses</option>
+        <option value="available">Active (unassigned)</option>
+        <option value="provided">Active (assigned)</option>
+        <option value="retained">Retained</option>
+        <option value="damaged">Damaged</option>
+        <option value="decommissioned">Decommissioned</option>
+        <option value="nonfunctional">Non-functional</option>
+      </select>
+      <select id="nextpFilterCategory">
+        <option value="">All categories</option>
+      </select>
+      <button class="btn btn-ghost" id="btnImportNextP">Import Next Perimeter list (110)</button>
+      <span id="nextpImportMsg" style="font-size:12px;color:var(--ink-soft);"></span>
+      <button class="btn btn-primary" id="btnAddNextP">+ Add asset</button>
+    </div>
+    <div class="table-card">
+      <table>
+        <thead>
+          <tr>
+            <th>Asset</th><th>Category</th><th>Status</th><th>Assigned to</th><th>Location</th><th>Updated</th>
+          </tr>
+        </thead>
+        <tbody id="nextpTbody"></tbody>
+      </table>
+      <div class="empty" id="nextpEmptyState" style="display:none;">
+        <b>No Active Laptops (NP) yet</b>
+        Import the list or add devices individually.
+      </div>
+    </div>
+  </div>
+
+  <div id="onboardView" style="display:none;">
+    <div class="eyebrow" style="margin-top:20px;">Onboarding — New Hire</div>
+    <p class="sub" style="margin-bottom:16px;">Enter the new employee's name to start (or resume) their onboarding checklist.</p>
+    <div class="toolbar">
+      <input type="text" id="onboardNameInput" placeholder="Enter new employee's name..." list="employeeNamesList">
+      <button class="btn btn-primary" id="btnOnboardStart">Start / resume onboarding</button>
+    </div>
+    <div id="onboardResults"></div>
+  </div>
+
+  <div id="offboardView" style="display:none;">
+    <div class="eyebrow" style="margin-top:20px;">Offboarding — Active Laptops (NP)</div>
+    <p class="sub" style="margin-bottom:16px;">Enter a departing employee's name to pull up their laptop and work through the offboarding checklist.</p>
+    <div class="toolbar">
+      <input type="text" id="offboardSearch" placeholder="Enter employee name...">
+      <button class="btn btn-primary" id="btnOffboardFind">Find laptop</button>
+    </div>
+    <div id="offboardResults"></div>
+  </div>
+
+  <div id="monitorView" style="display:none;">
+    <div class="stats" id="monitorStats"></div>
+    <div class="toolbar">
+      <input type="text" id="monitorSearch" placeholder="Search by brand, serial, or location...">
+      <select id="monitorFilterStatus">
+        <option value="">All statuses</option>
+        <option value="available">Available</option>
+        <option value="provided">Provided</option>
+        <option value="retained">Retained</option>
+        <option value="damaged">Damaged</option>
+        <option value="decommissioned">Decommissioned</option>
+        <option value="nonfunctional">Non-functional</option>
+      </select>
+      <select id="monitorFilterCategory">
+        <option value="">All brands</option>
+      </select>
+      <button class="btn btn-ghost" id="btnImportMonitors">Import Tampa Office monitors (36)</button>
+      <button class="btn btn-primary" id="btnAddMonitor">+ Add monitor</button>
+    </div>
+    <div class="table-card">
+      <table>
+        <thead>
+          <tr>
+            <th>Monitor</th><th>Brand</th><th>Status</th><th>Assigned to</th><th>Location</th><th>Updated</th>
+          </tr>
+        </thead>
+        <tbody id="monitorTbody"></tbody>
+      </table>
+      <div class="empty" id="monitorEmptyState" style="display:none;">
+        <b>No monitors yet</b>
+        Import the Tampa Office list or add one individually.
+      </div>
+    </div>
+  </div>
+
+  <div id="bulkView" style="display:none;">
+    <div class="stats" id="bulkStats"></div>
+    <div class="toolbar">
+      <input type="text" id="bulkSearch" placeholder="Search item name or category...">
+      <select id="bulkFilterCategory">
+        <option value="">All categories</option>
+      </select>
+      <button class="btn btn-primary" id="btnAddBulk">+ Add item type</button>
+    </div>
+    <div class="table-card">
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th><th>Category</th><th>Available</th><th>Provided</th><th>Retained</th><th>Damaged</th><th>Total</th><th>Location</th>
+          </tr>
+        </thead>
+        <tbody id="bulkTbody"></tbody>
+      </table>
+      <div class="empty" id="bulkEmptyState" style="display:none;">
+        <b>No bulk stock yet</b>
+        Add accessory types like mice, chargers, or headphones to track by quantity.
+      </div>
+    </div>
+  </div>
+  </main>
+</div>
+
+
+<!-- ADD ASSET MODAL -->
+<div class="overlay" id="addOverlay">
+  <div class="modal">
+    <button class="close-x" data-close="addOverlay">&times;</button>
+    <h2>Add asset</h2>
+    <p class="modal-sub">Enter the basics — you can log activity on it after.</p>
+    <div class="field">
+      <label>Item name</label>
+      <input type="text" id="f_name" placeholder="e.g. Dell Latitude 5420">
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Category</label>
+        <input type="text" id="f_category" placeholder="Laptop, Monitor, Phone...">
+      </div>
+      <div class="field">
+        <label>Serial number</label>
+        <input type="text" id="f_serial" placeholder="Optional">
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Starting status</label>
+        <select id="f_status">
+          <option value="available">Available (in stock)</option>
+          <option value="provided">Provided (assigned)</option>
+          <option value="retained">Retained (storage)</option>
+          <option value="decommissioned">Decommissioned (refreshed, ready to reissue)</option>
+          <option value="nonfunctional">Non-functional (beyond repair)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Assigned to (if provided)</label>
+        <input type="text" id="f_assigned" placeholder="Person name" list="employeeNamesList">
+      </div>
+    </div>
+    <div class="field">
+      <label>Location</label>
+      <input type="text" id="f_location" placeholder="Office, warehouse, remote...">
+    </div>
+    <div class="field">
+      <label>Notes</label>
+      <textarea id="f_notes" placeholder="Optional"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" data-close="addOverlay">Cancel</button>
+      <button class="btn btn-primary" id="btnSaveAsset">Add asset</button>
+    </div>
+  </div>
+</div>
+
+<!-- DETAIL MODAL -->
+<div class="overlay" id="detailOverlay">
+  <div class="modal" style="max-width:640px;">
+    <button class="close-x" data-close="detailOverlay">&times;</button>
+    <div class="detail-head">
+      <div>
+        <div class="eyebrow" id="d_id"></div>
+        <h2 id="d_name"></h2>
+      </div>
+      <span class="tag" id="d_status"></span>
+    </div>
+    <div class="detail-meta">
+      <div><div class="k">Category</div><div class="v" id="d_category"></div></div>
+      <div><div class="k">Serial</div><div class="v" id="d_serial"></div></div>
+      <div><div class="k">Assigned to</div><div class="v" id="d_assigned"></div></div>
+      <div><div class="k">Location</div><div class="v" id="d_location"></div></div>
+    </div>
+
+    <div class="actions-title">Log activity</div>
+    <div class="action-row" id="actionRow"></div>
+    <div id="subFormZone"></div>
+
+    <div class="actions-title">History</div>
+    <div class="timeline" id="timeline"></div>
+  </div>
+</div>
+
+<!-- IMPORT MODAL -->
+<div class="overlay" id="importOverlay">
+  <div class="modal" style="max-width:640px;">
+    <button class="close-x" data-close="importOverlay">&times;</button>
+    <h2>Import a list</h2>
+    <p class="modal-sub">Load a saved batch, or paste your own rows below.</p>
+
+    <div class="sub-form" style="margin-bottom:18px;">
+      <div style="font-weight:600;font-size:13.5px;margin-bottom:4px;">Tampa Office — working laptops</div>
+      <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:10px;">58 laptops, all set to <b>Provided</b> status, location <b>Tampa Office</b>, with "confirmed working condition" logged in each history.</div>
+      <button class="btn btn-accent btn-sm" id="btnImportTampa">Import Tampa Office list (58)</button>
+      <span id="tampaImportMsg" style="font-size:12px;color:var(--ink-soft);margin-left:8px;"></span>
+    </div>
+
+    <div class="sub-form" style="margin-bottom:18px;">
+      <div style="font-weight:600;font-size:13.5px;margin-bottom:4px;">Already imported? Update status instead</div>
+      <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:10px;">Switches every Tampa Office laptop currently marked Provided to <b>Available</b> (in stock), clears the assignee field, and logs the change — no duplicates created.</div>
+      <button class="btn btn-ghost btn-sm" id="btnMarkTampaAvailable">Set Tampa Office batch → Available</button>
+      <span id="tampaUpdateMsg" style="font-size:12px;color:var(--ink-soft);margin-left:8px;"></span>
+    </div>
+
+    <div class="sub-form" style="margin-bottom:18px;">
+      <div style="font-weight:600;font-size:13.5px;margin-bottom:4px;">Apply task log — Jul 14 (16 entries)</div>
+      <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:10px;">Matches each row to Laptop Inventory or Active Laptops (NP) by serial (or by name if no serial given), then applies Retained / Received / Provided / Decommission accordingly.</div>
+      <button class="btn btn-accent btn-sm" id="btnApplyTaskLog">Apply task log</button>
+      <span id="taskLogMsg" style="font-size:12px;color:var(--ink-soft);margin-left:8px;"></span>
+    </div>
+
+    <div class="field">
+      <label>Or paste your own rows</label>
+      <textarea id="f_bulk" placeholder="Assigned To&#9;Serial / Asset Tag&#9;Category&#9;Notes&#10;Jane Doe&#9;ABC123&#9;Dell Laptop&#9;" style="min-height:120px;font-family:'IBM Plex Mono',monospace;font-size:12px;"></textarea>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Location for this batch</label>
+        <input type="text" id="f_bulk_location" placeholder="e.g. Tampa Office">
+      </div>
+      <div class="field">
+        <label>Status for this batch</label>
+        <select id="f_bulk_status">
+          <option value="provided">Provided (assigned)</option>
+          <option value="available">Available (in stock)</option>
+          <option value="retained">Retained (storage)</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" data-close="importOverlay">Close</button>
+      <button class="btn btn-primary" id="btnBulkImport">Import pasted rows</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD BULK ITEM MODAL -->
+<div class="overlay" id="addBulkOverlay">
+  <div class="modal">
+    <button class="close-x" data-close="addBulkOverlay">&times;</button>
+    <h2>Add item type</h2>
+    <p class="modal-sub">For accessories tracked by quantity, not individual serial.</p>
+    <div class="row2">
+      <div class="field">
+        <label>Item name</label>
+        <input type="text" id="b_name" placeholder="e.g. Wireless Mouse">
+      </div>
+      <div class="field">
+        <label>Category</label>
+        <input type="text" id="b_category" placeholder="Mouse, Charger, Headphones...">
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Starting quantity (available)</label>
+        <input type="text" id="b_qty" placeholder="e.g. 25">
+      </div>
+      <div class="field">
+        <label>Location</label>
+        <input type="text" id="b_location" placeholder="Tampa Office...">
+      </div>
+    </div>
+    <div class="field">
+      <label>Notes</label>
+      <textarea id="b_notes" placeholder="Optional"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" data-close="addBulkOverlay">Cancel</button>
+      <button class="btn btn-primary" id="btnSaveBulk">Add item type</button>
+    </div>
+  </div>
+</div>
+
+<!-- BULK ITEM DETAIL MODAL -->
+<div class="overlay" id="bulkDetailOverlay">
+  <div class="modal" style="max-width:600px;">
+    <button class="close-x" data-close="bulkDetailOverlay">&times;</button>
+    <div class="detail-head">
+      <div>
+        <div class="eyebrow" id="bd_category"></div>
+        <h2 id="bd_name"></h2>
+      </div>
+    </div>
+    <div class="bucket-grid">
+      <div class="bucket"><div class="k">Available</div><div class="v" id="bd_available">0</div></div>
+      <div class="bucket"><div class="k">Provided</div><div class="v" id="bd_provided">0</div></div>
+      <div class="bucket"><div class="k">Retained</div><div class="v" id="bd_retained">0</div></div>
+      <div class="bucket"><div class="k">Damaged</div><div class="v" id="bd_damaged">0</div></div>
+    </div>
+    <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:14px;">Location: <b id="bd_location"></b> &nbsp;·&nbsp; Total owned: <b id="bd_total"></b> &nbsp;·&nbsp; Decommissioned: <b id="bd_decom"></b></div>
+
+    <div class="actions-title">Log activity</div>
+    <div class="action-row" id="bulkActionRow"></div>
+    <div id="bulkSubFormZone"></div>
+
+    <div class="actions-title">History</div>
+    <div class="timeline" id="bulkTimeline"></div>
+  </div>
+</div>
+
+<!-- ADD NEXT PERIMETER ASSET MODAL -->
+<div class="overlay" id="addNextPOverlay">
+  <div class="modal">
+    <button class="close-x" data-close="addNextPOverlay">&times;</button>
+    <h2>Add Active Laptop (NP)</h2>
+    <p class="modal-sub">Kept separate from your main serialized asset ledger.</p>
+    <div class="field">
+      <label>Item name</label>
+      <input type="text" id="np_name" placeholder="e.g. Dell Latitude 3540">
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Category</label>
+        <input type="text" id="np_category" placeholder="Dell Laptop, Microsoft Surface...">
+      </div>
+      <div class="field">
+        <label>Serial number</label>
+        <input type="text" id="np_serial" placeholder="Optional">
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Starting status</label>
+        <select id="np_status">
+          <option value="available">Available (in stock)</option>
+          <option value="provided">Active (assigned)</option>
+          <option value="retained">Retained (storage)</option>
+          <option value="decommissioned">Decommissioned (refreshed, ready to reissue)</option>
+          <option value="nonfunctional">Non-functional (beyond repair)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Assigned to (if provided)</label>
+        <input type="text" id="np_assigned" placeholder="Person name" list="employeeNamesList">
+      </div>
+    </div>
+    <div class="field">
+      <label>Location</label>
+      <input type="text" id="np_location" placeholder="e.g. GroundGame Health – Main">
+    </div>
+    <div class="field">
+      <label>Notes</label>
+      <textarea id="np_notes" placeholder="Optional"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" data-close="addNextPOverlay">Cancel</button>
+      <button class="btn btn-primary" id="btnSaveNextP">Add asset</button>
+    </div>
+  </div>
+</div>
+
+<!-- NEXT PERIMETER DETAIL MODAL -->
+<div class="overlay" id="nextpDetailOverlay">
+  <div class="modal" style="max-width:640px;">
+    <button class="close-x" data-close="nextpDetailOverlay">&times;</button>
+    <div class="detail-head">
+      <div>
+        <div class="eyebrow" id="np_d_id"></div>
+        <h2 id="np_d_name"></h2>
+      </div>
+      <span class="tag" id="np_d_status"></span>
+    </div>
+    <div class="detail-meta">
+      <div><div class="k">Category</div><div class="v" id="np_d_category"></div></div>
+      <div><div class="k">Serial</div><div class="v" id="np_d_serial"></div></div>
+      <div><div class="k">Assigned to</div><div class="v" id="np_d_assigned"></div></div>
+      <div><div class="k">Location</div><div class="v" id="np_d_location"></div></div>
+    </div>
+
+    <div class="actions-title">Log activity</div>
+    <div class="action-row" id="np_actionRow"></div>
+    <div id="np_subFormZone"></div>
+
+    <div class="actions-title">History</div>
+    <div class="timeline" id="np_timeline"></div>
+
+    <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--line);">
+      <button class="btn btn-ghost btn-sm" id="btnDeleteNextPAsset" style="color:var(--nonfunc);border-color:var(--nonfunc-soft);">Delete this record</button>
+      <span style="font-size:11.5px;color:var(--ink-faint);margin-left:8px;">Permanent — use for duplicates or entry mistakes, not for retiring working equipment.</span>
+    </div>
+  </div>
+</div>
+
+<!-- ADD MONITOR MODAL -->
+<div class="overlay" id="addMonitorOverlay">
+  <div class="modal">
+    <button class="close-x" data-close="addMonitorOverlay">&times;</button>
+    <h2>Add monitor</h2>
+    <p class="modal-sub">Tracked individually by serial, same lifecycle as your laptops.</p>
+    <div class="row2">
+      <div class="field">
+        <label>Brand</label>
+        <input type="text" id="mon_brand" placeholder="Sceptre, Dell, Acer...">
+      </div>
+      <div class="field">
+        <label>Model / Serial</label>
+        <input type="text" id="mon_serial" placeholder="Optional">
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Starting status</label>
+        <select id="mon_status">
+          <option value="available">Available (in stock)</option>
+          <option value="provided">Provided (assigned)</option>
+          <option value="retained">Retained (storage)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Assigned to (if provided)</label>
+        <input type="text" id="mon_assigned" placeholder="Person name" list="employeeNamesList">
+      </div>
+    </div>
+    <div class="field">
+      <label>Location</label>
+      <input type="text" id="mon_location" placeholder="e.g. Tampa Office">
+    </div>
+    <div class="field">
+      <label>Notes</label>
+      <textarea id="mon_notes" placeholder="Optional"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" data-close="addMonitorOverlay">Cancel</button>
+      <button class="btn btn-primary" id="btnSaveMonitor">Add monitor</button>
+    </div>
+  </div>
+</div>
+
+<!-- MONITOR DETAIL MODAL -->
+<div class="overlay" id="monitorDetailOverlay">
+  <div class="modal" style="max-width:640px;">
+    <button class="close-x" data-close="monitorDetailOverlay">&times;</button>
+    <div class="detail-head">
+      <div>
+        <div class="eyebrow" id="mon_d_id"></div>
+        <h2 id="mon_d_name"></h2>
+      </div>
+      <span class="tag" id="mon_d_status"></span>
+    </div>
+    <div class="detail-meta">
+      <div><div class="k">Brand</div><div class="v" id="mon_d_brand"></div></div>
+      <div><div class="k">Model / Serial</div><div class="v" id="mon_d_serial"></div></div>
+      <div><div class="k">Assigned to</div><div class="v" id="mon_d_assigned"></div></div>
+      <div><div class="k">Location</div><div class="v" id="mon_d_location"></div></div>
+    </div>
+
+    <div class="actions-title">Log activity</div>
+    <div class="action-row" id="mon_actionRow"></div>
+    <div id="mon_subFormZone"></div>
+
+    <div class="actions-title">History</div>
+    <div class="timeline" id="mon_timeline"></div>
+  </div>
+</div>
+
+<datalist id="employeeNamesList"></datalist>
+
+<script>
+// Standalone fallback: window.storage only exists inside Claude.ai artifacts.
+// When this file is opened directly in a browser (double-click, local server, etc.),
+// this polyfill provides the same get/set/delete/list interface backed by localStorage,
+// so every existing call in this file works unchanged in both environments.
+if(!window.storage){
+  window.__usingLocalStorageFallback = true;
+  const LS_PREFIX = 'eqledger:';
+  window.storage = {
+    async get(key, shared){
+      const raw = localStorage.getItem(LS_PREFIX + key);
+      if(raw === null) throw new Error('Key not found: ' + key);
+      return {key, value: raw, shared: !!shared};
+    },
+    async set(key, value, shared){
+      localStorage.setItem(LS_PREFIX + key, value);
+      return {key, value, shared: !!shared};
+    },
+    async delete(key, shared){
+      localStorage.removeItem(LS_PREFIX + key);
+      return {key, deleted: true, shared: !!shared};
+    },
+    async list(prefix, shared){
+      const p = LS_PREFIX + (prefix || '');
+      const keys = Object.keys(localStorage).filter(k=>k.startsWith(p)).map(k=>k.slice(LS_PREFIX.length));
+      return {keys, prefix, shared: !!shared};
+    }
+  };
+}
+
+const STATUS_LABEL = {
+  available:'Available', provided:'Provided', retained:'Retained',
+  damaged:'Damaged', decommissioned:'Decommissioned', nonfunctional:'Non-functional'
+};
+const STATUS_DOT = {
+  available:'#3E5C8A', provided:'#2F6F5E', retained:'#9A7A22',
+  damaged:'#B8562B', decommissioned:'#6E7480', nonfunctional:'#8B3A3A'
+};
+const NP_STATUS_LABEL = Object.assign({}, STATUS_LABEL, {provided:'Active', available:'Active'});
+
+let assets = [];
+let activeId = null;
+let pendingAction = null;
+
+const TAMPA_LAPTOPS = [
+  ['Spuritha Bhandaru','7RJS234','Dell Laptop',''],
+  ['Jada Hilton','2XVDR04','Dell Laptop',''],
+  ['Teresa Tademy','6XVDR04','Dell Laptop',''],
+  ['Chelsi Walker','C92CR44','Dell Laptop',''],
+  ['Prerana Patibandla','4YG4G64','Dell Laptop',''],
+  ['Lana Alman','3MWBQ04','Dell Laptop',''],
+  ['Donna Sogegian','GVDGYW3','Dell Laptop',''],
+  ['Nicole Taugner','71XSZ24','Dell Laptop',''],
+  ['Badrinath sanagavaram','D6QMGX3','Dell Laptop',''],
+  ['Kobi Cerra','DR83ZW3','Dell Laptop',''],
+  ['Elizabeth Morales','1NYLND3','Dell Laptop',''],
+  ['Fracheska Cermeno','B2N7M34','Dell Laptop',''],
+  ['Amanda Barg','4ZTJ4Y3','Dell Laptop',''],
+  ['Leonne Danso','96N6LX3','Dell Laptop',''],
+  ['Desiree Hagg','3XNMKY3','Dell Laptop',''],
+  ['Tej (previous)','7L7VY44','Dell Laptop','Capable of CC task, not for others'],
+  ['Oyebolu Akinkugbe','DJM7M34','Dell Laptop',''],
+  ['Robert Vlack','4R092J3','Dell Laptop',''],
+  ['Zxerquasha Murrin','H3JC6Y3','Dell Laptop',''],
+  ['Lauryn Dawns','FXVDR04','Dell Laptop',''],
+  ['Katelyn Gardner','6Z4CR44','Dell Laptop',''],
+  ['Kimberly Savakinas','3RGGFD4','Dell Laptop',''],
+  ['Michelle Snare Otto','B6ZJX64','Dell Laptop',''],
+  ['Saketh Juluri','819Q4Y3','Dell Laptop',''],
+  ['Luis Taveras','26ZJX64','Dell Laptop',''],
+  ['Rowenna Cann','93MS234','Dell Laptop',''],
+  ['Loaner laptop','FBFB214','Dell Laptop','Loaner'],
+  ['Heather Heifner','FKNRKY3','Dell Laptop',''],
+  ['Amy Totman','B32CR44','Dell Laptop',''],
+  ['Katelyn Gardner','G6TMGX3','Dell Laptop',''],
+  ['Erin Newton','CWFJ6B3','Dell Laptop',''],
+  ['Pronoy Nath','3Z1D594','Dell Laptop',''],
+  ['Aarushi Thakur','CBCKLY3','Dell Laptop',''],
+  ['Akash Bathini','13N7M34','Dell Laptop',''],
+  ['Corrina Edwards','HNYGLY3','Dell Laptop',''],
+  ['Honey Kress','82H6ZW3','Dell Laptop',''],
+  ['Sanjana Kumar Kalashetti','JNLW964','Dell Laptop',''],
+  ['Casie Renda','64VSZ24','Dell Laptop',''],
+  ['Malika Reeves','2QWSZ24','Dell Laptop',''],
+  ['Maria Rodriguez','BPY6MS3','Dell Laptop',''],
+  ['Dhruva Naidu','1PWRFS3','Dell Laptop',''],
+  ['Alejandro Garcia (Alex)','PF-5Z89Q','Lenovo',''],
+  ['David Westpal','0B3378X24243GP','Microsoft Surface',''],
+  ['Anuj Satya Matta','107382723857','Microsoft Surface',''],
+  ['David Henderson','0F38JGG24413MR','Microsoft Surface',''],
+  ['Natalie Bell','CND4420JSB','HP',''],
+  ['Alexia Garcia & Susan','CND4420J3Z','HP','Old laptop'],
+  ['Saketh Juluri','H4895Y3','HP',''],
+  ['Michael Calitri','2031','Macbook',''],
+  ['Unidentified','2123','Macbook',''],
+  ['Unidentified','2011','Macbook',''],
+  ['David Servello','1901','Macbook',''],
+  ['Mara Jiminez Hernandez','2024','Macbook',''],
+  ['Lana Alman','','Macbook',''],
+  ['Kelly Besecker','','Macbook',''],
+  ['Sabarish Vijayaragavan','PF-63LWFP','Lenovo',''],
+  ['Sush Shantha','J2QMGX3','Dell Laptop',''],
+  ['Ilarrisa Gonzalez','0F00CZJ23303FB','Microsoft Surface','']
+];
+
+// [Asset Tag, User, Serial Number, Model, Asset Type, Site]
+const NEXTP_LAPTOPS = [
+['JL3HFS3','Savanna Trotter','JL3HFS3','Latitude 3540','Windows Laptop','Main'],
+['HTKC5Y3','Angie Mercado','HTKC5Y3','Latitude 3540','Windows Laptop','Main'],
+['0F00C1L23153FB','Amogh Bhaskara','0F00C1L23153FB','Surface Laptop 5','Windows Laptop','Main'],
+['67TMGX3','Felicia Santiago','67TMGX3','Latitude 3520','Windows Laptop','Main'],
+['3DJC5Y3','Kimberly Bertram','3DJC5Y3','Latitude 3540','Windows Laptop','Main'],
+['0F00CZJ23303FB','','0F00CZJ23303FB','Surface Laptop 5','Windows Laptop','Main'],
+['23QMGX3','Neta Vaught','23QMGX3','Latitude 3520','Windows Laptop','Main'],
+['0F0037G23203FB','Brynn Newell','0F0037G23203FB','Surface Laptop 5','Windows Laptop','Main'],
+['087434223757','','087434223757','Surface Laptop 4','Windows Laptop','Main'],
+['GSMSRL3','Yesenia Zarzuela','GSMSRL3','Inspiron 16 7620 2-in-1','Windows Laptop','Main'],
+['FB0HFS3','Vikhil Baswaraju','FB0HFS3','Latitude 3540','Windows Laptop','Main'],
+['61H6ZW3','Ananya Thumma','61H6ZW3','Latitude 3540','Windows Laptop','Main'],
+['0F001Q223323FB','Sri Akula','0F001Q223323FB','Surface Laptop 5','Windows Laptop','Main'],
+['J9JC5Y3','Frank Garofalo','J9JC5Y3','Latitude 3540','Windows Laptop','Main'],
+['0F00CCL23223FB','Virginia Carone','0F00CCL23223FB','Surface Laptop 5','Windows Laptop','Main'],
+['3K3KLS3','Virginia Ortega','3K3KLS3','Latitude 3520','Windows Laptop','Main'],
+['099364423857','Autumn Balmer','099364423857','Surface Laptop 4','Windows Laptop','Main'],
+['2MG6ZW3','Carmen Freeman','2MG6ZW3','Latitude 3540','Windows Laptop','Main'],
+['CLF9ND3','Christina Burrows','CLF9ND3','Latitude 3520','Windows Laptop','Main'],
+['023232214857','Sri Akula','023232214857','Surface Laptop 4','Windows Laptop','Main'],
+['0F012A323353FB','Susan Rawlings','0F012A323353FB','Surface Laptop 5','Windows Laptop','Main'],
+['DRSN4Y3','Renee Johnson','DRSN4Y3','Latitude 3540','Windows Laptop','Main'],
+['0F01FA023123FB','','0F01FA023123FB','Surface Laptop 5','Windows Laptop','Main'],
+['002168424257','Natarsha Nesbitt','002168424257','Surface Laptop 4','Windows Laptop','Main'],
+['DGFXKY3','Kumary Concepcion','DGFXKY3','Latitude 3540','Windows Laptop','Main'],
+['8NPMKY3','Isabella Guzzi','8NPMKY3','Latitude 3540','Windows Laptop','Main'],
+['8PYGLY3','Breyahn Johnson','8PYGLY3','Latitude 3540','Windows Laptop','Main'],
+['BLDW4Y3','Christopher Weis','BLDW4Y3','Latitude 3540','Windows Laptop','Main'],
+['1LWBQ04','Heather Waugh','1LWBQ04','Latitude 3540','Windows Laptop','Main'],
+['GMPMKY3','Teresita Singleton','GMPMKY3','Latitude 3540','Windows Laptop','Main'],
+['DDYXH04','Darlene Cornish','DDYXH04','Latitude 3540','Windows Laptop','Main'],
+['3Y5HYW3','DeAndre Williams','3Y5HYW3','Latitude 3540','Windows Laptop','Main'],
+['BVVDR04','Paco Cruz','BVVDR04','Latitude 3540','Windows Laptop','Main'],
+['9PSNYW3','TeShaun Singleton','9PSNYW3','Latitude 3540','Windows Laptop','Main'],
+['89VDR04','Maria Alonso-Keen','89VDR04','Latitude 3540','Windows Laptop','Main'],
+['1TCB214','Keila Carrasco','1TCB214','Latitude 3540','Windows Laptop','Main'],
+['0F3FYJM24043FB','Valerie Cerra','0F3FYJM24043FB','Surface Laptop 5','Windows Laptop','Main'],
+['1YXBQ04','Sage Carrillo','1YXBQ04','Latitude 3540','Windows Laptop','Main'],
+['8GMRKY3','Emily Hernandez','8GMRKY3','Latitude 3540','Windows Laptop','Main'],
+['43VSZ24','Logan Engle','43VSZ24','Latitude 3540','Windows Laptop','Main'],
+['B3WSZ24','Darline Laguerre','B3WSZ24','Latitude 3540','Windows Laptop','Main'],
+['FXXBQ04','Koby Cerra','FXXBQ04','Latitude 3540','Windows Laptop','Main'],
+['13WSZ24','Ashanti Deshazo','13WSZ24','Latitude 3540','Windows Laptop','Main'],
+['17VSZ24','Yekzenia Marquez-Colon','17VSZ24','Latitude 3540','Windows Laptop','Main'],
+['67VSZ24','Anahid Sarkissian','67VSZ24','Latitude 3540','Windows Laptop','Main'],
+['G3XSZ24','Teresa Alonso','G3XSZ24','Latitude 3540','Windows Laptop','Main'],
+['GQWSZ24','Katie Boylls','GQWSZ24','Latitude 3540','Windows Laptop','Main'],
+['C79XR34','Amy Rawlings','C79XR34','Latitude 3550','Windows Laptop','Main'],
+['C2N7M34','Yuleth Davi','C2N7M34','Latitude 3550','Windows Laptop','Main'],
+['43N7M34','Kayla Nembhard','43N7M34','Latitude 3550','Windows Laptop','Main'],
+['0F01F9U23123FB','Nive Naik','0F01F9U23123FB','Surface Laptop 5','Windows Laptop','Main'],
+['CKLS234','Mounika Vasavi Battina','CKLS234','Latitude 3550','Windows Laptop','Main'],
+['1Y3YS34','Abba Lopez','1Y3YS34','Latitude 3450','Windows Laptop','Main'],
+['62VBV34','','62VBV34','Latitude 3450','Windows Laptop','Main'],
+['CX3YS34','Antoinette Wright','CX3YS34','Latitude 3450','Windows Laptop','Main'],
+['J28DL44','Maggie Jackson','J28DL44','Latitude 3550','Windows Laptop','Main'],
+['H08DL44','Brenda Fernandez','H08DL44','Latitude 3550','Windows Laptop','Main'],
+['6C8DL44','Yadira Alquitela','6C8DL44','Latitude 3550','Windows Laptop','Main'],
+['DN7VY44','','DN7VY44','Latitude 3550','Windows Laptop','Main'],
+['FTR4LY3','Diane Morin','FTR4LY3','Latitude 3540','Windows Laptop','Main'],
+['8YBW954','Danielle Rubio','8YBW954','Latitude 3550','Windows Laptop','Main'],
+['F88DL44','Jessica Lynn Gosinski','F88DL44','Latitude 3550','Windows Laptop','Main'],
+['7DZV954','Amarah Khan','7DZV954','Latitude 3550','Windows Laptop','Main'],
+['8Q4W954','Ellisha Pardue','8Q4W954','Latitude 3550','Windows Laptop','Main'],
+['C98DL44','Anthony Guzzi','C98DL44','Latitude 3550','Windows Laptop','Main'],
+['8Z4CR44','Sreevaishnavi Sanagavaram','8Z4CR44','Latitude 3550','Windows Laptop','Main'],
+['G55CR44','Wanda Bermúdez-Cardé','G55CR44','Latitude 3550','Windows Laptop','Main'],
+['J82CR44','Manish Ramchandani','J82CR44','Latitude 3550','Windows Laptop','Main'],
+['HZ4CR44','Haley Brown','HZ4CR44','Latitude 3550','Windows Laptop','Main'],
+['8C2CR44','Mayra Alvarado','8C2CR44','Latitude 3550','Windows Laptop','Main'],
+['G92CR44','Antoinette Wright','G92CR44','Latitude 3550','Windows Laptop','Main'],
+['GGYXH04','','GGYXH04','Latitude 3540','Windows Laptop','Main'],
+['36ZJX54','Tessa Kopnisky','36ZJX54','Latitude 3450','Windows Laptop','Main'],
+['13ZJX54','Haley Kirkpatrick','13ZJX54','Latitude 3450','Windows Laptop','Main'],
+['96ZJX54','Rylie Addison','96ZJX54','Latitude 3450','Windows Laptop','Main'],
+['HBYXH04','Luz Gomez','HBYXH04','Latitude 3540','Windows Laptop','Main'],
+['0B3364624293GP','Jeff Cornellier','0B3364624293GP','Surface Laptop Go 3','Windows Laptop','Main'],
+['CNYGLY3','','CNYGLY3','Latitude 3540','Windows Laptop','Main'],
+['8HLS234','Andrea Villalpando','8HLS234','Latitude 3550','Windows Laptop','Main'],
+['25BKLY3','Monica Ramirez','25BKLY3','Latitude 3540','Windows Laptop','Main'],
+['1XM7M34','Grace Tate','1XM7M34','Latitude 3550','Windows Laptop','Main'],
+['CDLS234','Luis Taveras','CDLS234','Latitude 3550','Windows Laptop','Main'],
+['9L7VY44','Phoebe Fernandez','9L7VY44','Latitude 3550','Windows Laptop','Main'],
+['GHLS234','Emily Salguero','GHLS234','Latitude 3550','Windows Laptop','Main'],
+['2RCKLY3','Bita Shafaghat','2RCKLY3','Latitude 3540','Windows Laptop','Main'],
+['0F36RRH23433FB','Kathleen Jones','0F36RRH23433FB','Surface Laptop 5','Windows Laptop','Main'],
+['9GWBQ04','','9GWBQ04','Latitude 3540','Windows Laptop','Main'],
+['0F38VCV25203GT','Dana Marsh','0F38VCV25203GT','Surface Laptop 6 for Business','Windows Laptop','Main'],
+['PF5JAQ0N','Sri Akula','PF5JAQ0N','21NU0032US','Windows Laptop','Main'],
+['6ZR4LY3','Steve Wu','6ZR4LY3','Latitude 3540','Windows Laptop','Main'],
+['481M1B3','Cara Gustafson','481M1B3','Latitude 3520','Windows Laptop','Main'],
+['JBC0284','Bruce Gordon','JBC0284','Dell Pro 16 Plus PB16255','Windows Laptop','Main'],
+['CND4420J58','Ashanti Deshazo','CND4420J58','HP 250 15.6 inch G9 Notebook PC','Windows Laptop','Main'],
+['PF5ZLFL4','Prajay Reddy Minuka','PF5ZLFL4','21QL001WUS','Windows Laptop','Main'],
+['PF5YWD5Z','Harsh Sharma','PF5YWD5Z','21QL001WUS','Windows Laptop','Main'],
+['PF5TY4NG','Darvika Gogineni','PF5TY4NG','21QL001WUS','Windows Laptop','Main'],
+['ANUJSPC','Anuj Satya Matta','PF5YWWGD','21QL001WUS','Windows Laptop','Main'],
+['PF5S7E21','Harshavardhan Reddy Naregudem','PF5S7E21','21QL001WUS','Windows Laptop','Main'],
+['PF5ZM4VG','Abner Mason','PF5ZM4VG','21QL001WUS','Windows Laptop','Main'],
+['PF63LWFP','Sabarish Vijayaragavan','PF63LWFP','21QL001WUS','Windows Laptop','Main'],
+['PF63TDQH','','PF63TDQH','21QL001WUS','Windows Laptop','Main'],
+['PF63LW1M','Sadvilas Buddiga','PF63LW1M','21QL001WUS','Windows Laptop','Main'],
+['PF61CMAG','Meredith Welsh','PF61CMAG','21QL001WUS','Windows Laptop','Main'],
+['PF63TC2V','Srikanth Akula','PF63TC2V','21QL001WUS','Windows Laptop','Main'],
+['PF5W2TTG','Saiteja Godha','PF5W2TTG','21QL001WUS','Windows Laptop','Main'],
+['PF5Z7HN8','Bhargava Deep Guruvula','PF5Z7HN8','21QR001EUS','Windows Laptop','Main'],
+['BK34PJV25333P7','Susan Rawlings','BK34PJV25333P7','Surface Laptop for Business 7th Edition with Intel','Windows Laptop','Main'],
+['PF626NFK','Berkley Nelson','PF626NFK','21QL001WUS','Windows Laptop','Main'],
+['RAHAT-GGH','Rahat Bhalla','PF5YPK6A','21QR001EUS','Windows Laptop','Main'],
+['Tonys-MacBook-Pro.local','Tony Grassa','C02GF5EYMD6R','MacBook Pro, Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz, 2019','Mac Laptop','Remote - Skyhealth']
+];
+
+function deriveCategory(model){
+  if(/surface/i.test(model)) return 'Microsoft Surface';
+  if(/macbook/i.test(model)) return 'Macbook';
+  if(/^hp\b|\bhp\s/i.test(model)) return 'HP';
+  if(/^21[a-z0-9]{6}/i.test(model)) return 'Lenovo';
+  if(/latitude|inspiron|dell/i.test(model)) return 'Dell Laptop';
+  return 'Other';
+}
+
+let bulkItems = [];
+let activeBulkId = null;
+let pendingBulkAction = null;
+
+function bulkUid(){ return 'BLK-' + String(Math.floor(1000+Math.random()*9000)); }
+
+async function loadBulkItems(){
+  try{
+    const res = await window.storage.get('bulkItems', true);
+    bulkItems = res ? JSON.parse(res.value) : [];
+  }catch(e){
+    bulkItems = [];
+  }
+  renderBulk();
+}
+
+async function saveBulkItems(){
+  try{
+    await window.storage.set('bulkItems', JSON.stringify(bulkItems), true);
+  }catch(e){
+    console.error('Save failed', e);
+  }
+}
+
+function addBulkHistory(item, action, detail){
+  item.history = item.history || [];
+  item.history.unshift({date: today(), action, detail: detail || ''});
+  item.updated = today();
+}
+
+function bulkTotal(item){
+  const b = item.buckets;
+  return b.available + b.provided + b.retained + b.damaged;
+}
+
+function renderBulk(){
+  renderBulkStats();
+  renderBulkCategoryFilter();
+  renderBulkTable();
+}
+
+function renderBulkStats(){
+  const totals = {available:0,provided:0,retained:0,damaged:0,decommissioned:0};
+  bulkItems.forEach(it=>{
+    totals.available += it.buckets.available;
+    totals.provided += it.buckets.provided;
+    totals.retained += it.buckets.retained;
+    totals.damaged += it.buckets.damaged;
+    totals.decommissioned += it.buckets.decommissioned || 0;
+  });
+  const el = document.getElementById('bulkStats');
+  el.innerHTML = `
+    <div class="stat" style="--dot:${STATUS_DOT.available}"><span class="n">${totals.available}</span><span class="l">Available units</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.provided}"><span class="n">${totals.provided}</span><span class="l">Provided units</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.retained}"><span class="n">${totals.retained}</span><span class="l">Retained units</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.damaged}"><span class="n">${totals.damaged}</span><span class="l">Damaged units</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.decommissioned}"><span class="n">${totals.decommissioned}</span><span class="l">Decommissioned</span></div>
+  `;
+}
+
+function renderBulkCategoryFilter(){
+  const sel = document.getElementById('bulkFilterCategory');
+  const current = sel.value;
+  const cats = [...new Set(bulkItems.map(i=>i.category).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">All categories</option>' + cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+  sel.value = current;
+}
+
+function renderBulkTable(){
+  const search = document.getElementById('bulkSearch').value.toLowerCase();
+  const fCategory = document.getElementById('bulkFilterCategory').value;
+
+  let list = bulkItems.filter(it=>{
+    if(fCategory && it.category !== fCategory) return false;
+    if(search){
+      const hay = [it.name,it.category,it.location].join(' ').toLowerCase();
+      if(!hay.includes(search)) return false;
+    }
+    return true;
+  }).sort((a,b)=> (b.updated||'').localeCompare(a.updated||''));
+
+  const tbody = document.getElementById('bulkTbody');
+  const emptyState = document.getElementById('bulkEmptyState');
+
+  if(list.length===0){
+    tbody.innerHTML='';
+    emptyState.style.display='block';
+    return;
+  }
+  emptyState.style.display='none';
+
+  function qtyCell(n){ return `<span class="qty ${n===0?'zero':''}">${n}</span>`; }
+
+  tbody.innerHTML = list.map(it=>`
+    <tr onclick="openBulkDetail('${it.id}')">
+      <td><div class="asset-name">${escapeHtml(it.name)}</div><div class="asset-id">${it.id}</div></td>
+      <td>${escapeHtml(it.category||'—')}</td>
+      <td>${qtyCell(it.buckets.available)}</td>
+      <td>${qtyCell(it.buckets.provided)}</td>
+      <td>${qtyCell(it.buckets.retained)}</td>
+      <td>${qtyCell(it.buckets.damaged)}</td>
+      <td>${qtyCell(bulkTotal(it))}</td>
+      <td>${escapeHtml(it.location||'—')}</td>
+    </tr>
+  `).join('');
+}
+
+/* ---- Add bulk item ---- */
+document.getElementById('btnAddBulk').onclick = ()=> openOverlay('addBulkOverlay');
+
+document.getElementById('btnSaveBulk').onclick = async ()=>{
+  const name = document.getElementById('b_name').value.trim();
+  if(!name){ alert('Give the item a name first.'); return; }
+  const qty = parseInt(document.getElementById('b_qty').value) || 0;
+  const item = {
+    id: bulkUid(),
+    name,
+    category: document.getElementById('b_category').value.trim(),
+    location: document.getElementById('b_location').value.trim(),
+    buckets: {available: qty, provided:0, retained:0, damaged:0, decommissioned:0},
+    history: [],
+    updated: today()
+  };
+  const note = document.getElementById('b_notes').value.trim();
+  addBulkHistory(item, 'Added to stock', `Initial quantity: ${qty}${note ? ' — '+note : ''}`);
+  bulkItems.push(item);
+  await saveBulkItems();
+  renderBulk();
+  closeOverlay('addBulkOverlay');
+  ['b_name','b_category','b_qty','b_location','b_notes'].forEach(id=>document.getElementById(id).value='');
+};
+
+/* ---- Bulk detail / actions ---- */
+function openBulkDetail(id){
+  activeBulkId = id;
+  const it = bulkItems.find(x=>x.id===id);
+  if(!it) return;
+  document.getElementById('bd_category').textContent = it.category || 'Item';
+  document.getElementById('bd_name').textContent = it.name;
+  document.getElementById('bd_available').textContent = it.buckets.available;
+  document.getElementById('bd_provided').textContent = it.buckets.provided;
+  document.getElementById('bd_retained').textContent = it.buckets.retained;
+  document.getElementById('bd_damaged').textContent = it.buckets.damaged;
+  document.getElementById('bd_location').textContent = it.location || '—';
+  document.getElementById('bd_total').textContent = bulkTotal(it);
+  document.getElementById('bd_decom').textContent = it.buckets.decommissioned || 0;
+
+  renderBulkActionRow(it);
+  document.getElementById('bulkSubFormZone').innerHTML = '';
+  renderBulkTimeline(it);
+  openOverlay('bulkDetailOverlay');
+}
+
+function renderBulkActionRow(it){
+  const row = document.getElementById('bulkActionRow');
+  const buttons = [
+    {label:'Receive stock', cls:'btn-accent', action:'receive'},
+    {label:'Issue', cls:'btn-ghost', action:'issue'},
+    {label:'Return', cls:'btn-ghost', action:'return'},
+    {label:'Retain', cls:'btn-ghost', action:'retain'},
+    {label:'Mark damaged', cls:'btn-warn', action:'damage'},
+    {label:'Repair', cls:'btn-ghost', action:'repair'},
+    {label:'Decommission', cls:'btn-decom', action:'decommission'}
+  ];
+  row.innerHTML = buttons.map(b=>`<button class="btn btn-sm ${b.cls}" data-action="${b.action}">${b.label}</button>`).join('');
+  row.querySelectorAll('button[data-action]').forEach(btn=>{
+    btn.onclick = ()=> showBulkSubForm(btn.dataset.action);
+  });
+}
+
+function showBulkSubForm(action){
+  pendingBulkAction = action;
+  const zone = document.getElementById('bulkSubFormZone');
+  zone.innerHTML = `
+    <div class="sub-form">
+      <div class="field"><label>Quantity</label><input type="text" id="bsf_qty" placeholder="e.g. 5"></div>
+      <div class="field"><label>Notes</label><textarea id="bsf_notes" placeholder="Who it's for, why, etc."></textarea></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost btn-sm" id="bsf_cancel">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="bsf_confirm">Confirm</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('bsf_cancel').onclick = ()=>{ zone.innerHTML=''; pendingBulkAction=null; };
+  document.getElementById('bsf_confirm').onclick = confirmBulkAction;
+}
+
+async function confirmBulkAction(){
+  const it = bulkItems.find(x=>x.id===activeBulkId);
+  if(!it) return;
+  const qty = parseInt(document.getElementById('bsf_qty').value);
+  if(!qty || qty <= 0){ alert('Enter a quantity greater than zero.'); return; }
+  const notes = document.getElementById('bsf_notes').value.trim();
+  const b = it.buckets;
+
+  function moveFrom(bucket, label){
+    if(b[bucket] < qty){ alert(`Only ${b[bucket]} available in "${bucket}" — reduce the quantity.`); return false; }
+    b[bucket] -= qty;
+    return true;
+  }
+
+  switch(pendingBulkAction){
+    case 'receive':
+      b.available += qty;
+      addBulkHistory(it,'Received stock', `+${qty}${notes ? ' — '+notes : ''}`);
+      break;
+    case 'issue':
+      if(!moveFrom('available')) return;
+      b.provided += qty;
+      addBulkHistory(it,'Issued', `${qty} issued${notes ? ' — '+notes : ''}`);
+      break;
+    case 'return':
+      if(!moveFrom('provided')) return;
+      b.available += qty;
+      addBulkHistory(it,'Returned', `${qty} returned to stock${notes ? ' — '+notes : ''}`);
+      break;
+    case 'retain':
+      if(!moveFrom('available')) return;
+      b.retained += qty;
+      addBulkHistory(it,'Retained', `${qty} moved to storage${notes ? ' — '+notes : ''}`);
+      break;
+    case 'damage':
+      if(!moveFrom('available')) return;
+      b.damaged += qty;
+      addBulkHistory(it,'Marked damaged', `${qty}${notes ? ' — '+notes : ''}`);
+      break;
+    case 'repair':
+      if(!moveFrom('damaged')) return;
+      b.available += qty;
+      addBulkHistory(it,'Repaired', `${qty} returned to available${notes ? ' — '+notes : ''}`);
+      break;
+    case 'decommission':
+      if(b.damaged >= qty){ b.damaged -= qty; }
+      else if(b.available >= qty){ b.available -= qty; }
+      else if(b.retained >= qty){ b.retained -= qty; }
+      else { alert('Not enough units in stock to decommission that quantity.'); return; }
+      b.decommissioned = (b.decommissioned||0) + qty;
+      addBulkHistory(it,'Decommissioned', `${qty} retired${notes ? ' — '+notes : ''}`);
+      break;
+  }
+  await saveBulkItems();
+  document.getElementById('bulkSubFormZone').innerHTML='';
+  pendingBulkAction=null;
+  openBulkDetail(it.id);
+  renderBulk();
+}
+
+function renderBulkTimeline(it){
+  const el = document.getElementById('bulkTimeline');
+  const hist = it.history || [];
+  if(hist.length===0){ el.innerHTML = '<div style="color:var(--ink-faint);font-size:12.5px;">No activity logged yet.</div>'; return; }
+  el.innerHTML = hist.map(h=>`
+    <div class="tl-item">
+      <div class="tl-dot"></div>
+      <div class="tl-body">
+        <b>${escapeHtml(h.action)}</b>
+        <div class="tl-meta">${fmtDate(h.date)}</div>
+        ${h.detail ? `<div class="tl-note">${escapeHtml(h.detail)}</div>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+/* ---- Task log batch apply ---- */
+const TASK_LOG = [
+  {employee:'Nancy Slavens', equipment:'', serial:'', status:'Retained', col1:'', col2:'', decommission:true, items:''},
+  {employee:'Alejandro Garcia (Alex)', equipment:'', serial:'PF-5Z89Q', status:'Received', col1:'', col2:'', decommission:true, items:'Laptop, charger'},
+  {employee:'Rushanthi Wijayasinghe', equipment:'', serial:'', status:'Retained', col1:'', col2:'', decommission:false, items:''},
+  {employee:'Nive Naik', equipment:'Secondary laptop', serial:'96ZJX64', status:'Provided', col1:'Prior device: Nina Castor', col2:'Not under NP support', decommission:false, items:'Laptop, charger', forceStore:'nextp'},
+  {employee:'Desiree Hagg', equipment:'', serial:'3XNMKY3', status:'Received', col1:'', col2:'', decommission:true, items:'Laptop, charger'},
+  {employee:'Pronoy Nath', equipment:'', serial:'3Z1D594', status:'Received', col1:'', col2:'', decommission:true, items:'Laptop, charger'},
+  {employee:'Sreevaishnavi Sanagavaram', equipment:'', serial:'8Z4CR44', status:'Provided', col1:'', col2:'', decommission:false, items:'Laptop, charger'},
+  {employee:'Ilarissa Gonzalez', equipment:'', serial:'0F00CZJ23303FB', status:'Received', col1:'', col2:'', decommission:true, items:'Laptop, charger, Monitor, Mouse'},
+  {employee:'Lana Alman', equipment:'', serial:'', status:'', col1:'', col2:'', decommission:false, items:''},
+  {employee:'Shelli Rigsby-Treece', equipment:'', serial:'', status:'Retained', col1:'', col2:'', decommission:false, items:''},
+  {employee:'Sabrish Vijayaragavan', equipment:'', serial:'PF-63LWFP', status:'Received', col1:'', col2:'', decommission:true, items:'Laptop, charger, Mouse'},
+  {employee:'Renee Johnson', equipment:'', serial:'', status:'', col1:'', col2:'', decommission:true, items:''},
+  {employee:'Danielle Rubio (Fernandez)', equipment:'', serial:'', status:'', col1:'', col2:'', decommission:true, items:''},
+  {employee:'Steve Wu', equipment:'', serial:'', status:'', col1:'', col2:'', decommission:false, items:''},
+  {employee:'Virginia Ortega', equipment:'Laptop Charger(TypeC)', serial:'', status:'Provided', col1:'', col2:'', decommission:false, items:'Charger'},
+  {employee:'Sush Shantha', equipment:'', serial:'J2QMGX3', status:'Received', col1:'', col2:'', decommission:false, items:'Laptop'}
+];
+
+function normSerial(s){ return (s||'').toUpperCase().replace(/[^A-Z0-9]/g,''); }
+function normName(n){ return (n||'').toLowerCase().replace(/\(.*?\)/g,'').replace(/\s+/g,' ').trim(); }
+
+function findLedgerMatches(serial, employeeName){
+  const results = [];
+  const ns = normSerial(serial);
+  if(ns){
+    assets.forEach(a=>{ if(normSerial(a.serial)===ns) results.push({store:'assets', asset:a}); });
+    nextpAssets.forEach(a=>{ if(normSerial(a.serial)===ns) results.push({store:'nextp', asset:a}); });
+    return results; // serial given: trust serial matches only, no name fallback
+  }
+  if(employeeName){
+    const nn = normName(employeeName);
+    assets.forEach(a=>{ if(normName(a.assigned)===nn) results.push({store:'assets', asset:a}); });
+    nextpAssets.forEach(a=>{ if(normName(a.assigned)===nn) results.push({store:'nextp', asset:a}); });
+  }
+  return results;
+}
+
+function determineTaskAction(row){
+  if(row.decommission) return {newStatus:'decommissioned', label:'Decommissioned'};
+  if(row.status==='Retained') return {newStatus:'retained', label:'Retained'};
+  if(row.status==='Received') return {newStatus:'available', label:'Received (back in stock)'};
+  if(row.status==='Provided') return {newStatus:'provided', label:'Provided'};
+  return null;
+}
+
+async function applyTaskLog(){
+  const applied = [];
+  const unmatched = [];
+  const skipped = [];
+  const accessoryNotes = [];
+  let assetsChanged = false, nextpChanged = false;
+
+  for(const row of TASK_LOG){
+    if(!row.serial && row.items && /charger|mouse|monitor|headphone/i.test(row.items) && !/laptop/i.test(row.items)){
+      accessoryNotes.push(`${row.employee} — ${row.items} (${row.status || 'no status'}) — not yet tracked, Bulk Stock catalog pending`);
+      continue;
+    }
+
+    const action = determineTaskAction(row);
+    if(!action){
+      skipped.push(`${row.employee} — no status/decommission info, skipped`);
+      continue;
+    }
+
+    const matches = findLedgerMatches(row.serial, row.employee);
+
+    if(matches.length === 0){
+      const canCreate = row.serial || row.status === 'Retained';
+      if(canCreate){
+        const store = row.forceStore || 'assets';
+        const asset = {
+          id: uid(),
+          name: (row.equipment || 'Laptop') + ' — ' + row.employee,
+          category: row.equipment || 'Laptop',
+          serial: row.serial || '',
+          status: action.newStatus,
+          assigned: action.newStatus==='provided' ? row.employee : '',
+          location: '',
+          history: [],
+          updated: today()
+        };
+        let detail = `Task log — new entry, ${action.label}`;
+        if(row.col1) detail += ` — ${row.col1}`;
+        if(row.col2) detail += ` — ${row.col2}`;
+        if(row.items) detail += ` — Items: ${row.items}`;
+        addHistory(asset, action.label, detail);
+        if(store === 'nextp'){ nextpAssets.push(asset); nextpChanged = true; }
+        else { assets.push(asset); assetsChanged = true; }
+        applied.push(`${row.employee} — new entry${asset.serial ? ' ('+asset.serial+')' : ''} added to ${store==='nextp' ? 'Active Laptops (NP)' : 'Laptop Inventory'} as ${action.label}`);
+      } else {
+        unmatched.push(`${row.employee}${row.serial ? ' ('+row.serial+')' : ''} — no matching asset found, needs manual review`);
+      }
+      continue;
+    }
+
+    for(const m of matches){
+      const a = m.asset;
+      let detail = `Task log — ${row.status || (row.decommission ? 'decommission' : 'update')}`;
+      if(row.col1) detail += ` — ${row.col1}`;
+      if(row.col2) detail += ` — ${row.col2}`;
+      if(row.items) detail += ` — Items: ${row.items}`;
+
+      if(action.newStatus==='decommissioned' && m.store==='nextp'){
+        await moveNextPToSerializedAssets(a, detail);
+        assetsChanged = true; nextpChanged = true;
+        applied.push(`${row.employee} (${a.serial || 'no serial'}) — Decommissioned in Active Laptops (NP), moved to Laptop Inventory as Available`);
+        continue;
+      }
+
+      if(action.newStatus==='decommissioned'){ a.status='decommissioned'; a.assigned=''; }
+      else if(action.newStatus==='available'){ a.status='available'; a.assigned=''; }
+      else if(action.newStatus==='retained'){ a.status='retained'; }
+      else if(action.newStatus==='provided'){ a.status='provided'; if(row.employee) a.assigned = row.employee; }
+
+      addHistory(a, action.label, detail);
+      if(m.store === 'assets') assetsChanged = true; else nextpChanged = true;
+      applied.push(`${row.employee} (${a.serial || 'no serial'}, ${m.store==='nextp' ? 'Active Laptops (NP)' : 'Laptop Inventory'}) → ${action.label}`);
+    }
+  }
+
+  if(assetsChanged) await saveAssets();
+  if(nextpChanged) await saveNextPAssets();
+  render(); renderNextP();
+
+  let summary = `Applied ${applied.length} update(s).`;
+  if(applied.length) summary += '\n\n' + applied.join('\n');
+  if(unmatched.length) summary += `\n\nNeeds manual review (${unmatched.length}):\n` + unmatched.join('\n');
+  if(accessoryNotes.length) summary += `\n\nAccessory notes (${accessoryNotes.length}, not yet in Bulk Stock):\n` + accessoryNotes.join('\n');
+  if(skipped.length) summary += `\n\nSkipped (${skipped.length}):\n` + skipped.join('\n');
+  document.getElementById('taskLogMsg').textContent = `Applied ${applied.length}, ${unmatched.length} need review, ${accessoryNotes.length} accessory note(s).`;
+  alert(summary);
+}
+
+document.getElementById('btnApplyTaskLog').onclick = applyTaskLog;
+
+/* ---- Tab switching ---- */
+function showTab(which){
+  const tabs = {overview:'tabOverview', scan:'tabScan', serial:'tabSerial', nextp:'tabNextP', onboard:'tabOnboard', offboard:'tabOffboard', monitors:'tabMonitors', bulk:'tabBulk'};
+  const views = {overview:'overviewView', scan:'scanView', serial:'serialView', nextp:'nextpView', onboard:'onboardView', offboard:'offboardView', monitors:'monitorView', bulk:'bulkView'};
+  const meta = {
+    overview: {title:'Overview', desc:'Company-wide equipment totals across every section.'},
+    scan: {title:'Scan', desc:'Scan a barcode to look up or add equipment by serial.'},
+    serial: {title:'Laptop Inventory', desc:'Track every device from provisioning to decommission — one record, full history.'},
+    nextp: {title:'Active Laptops (NP)', desc:'Laptops supported by Next Perimeter, tracked separately from general inventory.'},
+    onboard: {title:'Onboarding', desc:'Walk a new hire through identity, equipment, and access — step by step.'},
+    offboard: {title:'Offboarding', desc:'Find a departing employee\u2019s laptop and work through the offboarding checklist.'},
+    monitors: {title:'Monitors', desc:'Individually tracked by brand and serial, same lifecycle as your laptops.'},
+    bulk: {title:'Bulk Stock', desc:'Accessories tracked by quantity — mice, chargers, and other small equipment.'}
+  };
+  if(which !== 'scan') stopScan();
+  Object.keys(tabs).forEach(k=>{
+    document.getElementById(tabs[k]).classList.toggle('active', k===which);
+    document.getElementById(views[k]).style.display = (k===which) ? 'block' : 'none';
+  });
+  document.getElementById('pageTitle').textContent = meta[which].title;
+  document.getElementById('pageDesc').textContent = meta[which].desc;
+  document.getElementById('crumbCurrent').textContent = meta[which].title;
+  if(which === 'overview') renderOverview();
+}
+document.getElementById('tabOverview').onclick = ()=> showTab('overview');
+document.getElementById('tabScan').onclick = ()=> showTab('scan');
+document.getElementById('tabSerial').onclick = ()=> showTab('serial');
+document.getElementById('tabNextP').onclick = ()=> showTab('nextp');
+document.getElementById('tabOnboard').onclick = ()=> showTab('onboard');
+document.getElementById('tabOffboard').onclick = ()=> showTab('offboard');
+document.getElementById('tabMonitors').onclick = ()=> showTab('monitors');
+document.getElementById('tabBulk').onclick = ()=> showTab('bulk');
+document.getElementById('bulkSearch').addEventListener('input', renderBulkTable);
+document.getElementById('bulkFilterCategory').addEventListener('change', renderBulkTable);
+
+/* ---- Barcode Scan ---- */
+let html5QrCodeInstance = null;
+
+async function stopScan(){
+  if(html5QrCodeInstance){
+    try{
+      await html5QrCodeInstance.stop();
+      html5QrCodeInstance.clear();
+    }catch(e){ /* already stopped */ }
+    html5QrCodeInstance = null;
+  }
+  const startBtn = document.getElementById('btnStartScan');
+  const stopBtn = document.getElementById('btnStopScan');
+  const hint = document.getElementById('scanHint');
+  if(startBtn) startBtn.style.display = 'inline-block';
+  if(stopBtn) stopBtn.style.display = 'none';
+  if(hint) hint.style.display = 'none';
+}
+
+document.getElementById('btnStartScan').onclick = async ()=>{
+  document.getElementById('scanResult').innerHTML = '';
+  if(typeof Html5Qrcode === 'undefined'){
+    document.getElementById('scanResult').innerHTML = `<div style="color:var(--warn);font-size:13px;">Scanning library failed to load — check your internet connection and reload the page.</div>`;
+    return;
+  }
+  document.getElementById('btnStartScan').style.display = 'none';
+  document.getElementById('btnStopScan').style.display = 'inline-block';
+  document.getElementById('scanHint').style.display = 'block';
+  html5QrCodeInstance = new Html5Qrcode("scanReader");
+  const responsiveBox = (viewfinderWidth, viewfinderHeight)=>{
+    const size = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.75);
+    return { width: size, height: Math.floor(size * 0.6) };
+  };
+  try{
+    await html5QrCodeInstance.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: responsiveBox, aspectRatio: 1.4 },
+      onScanSuccess,
+      ()=>{}
+    );
+  }catch(err){
+    document.getElementById('scanResult').innerHTML = `<div style="color:var(--warn);font-size:13px;">Camera access failed: ${escapeHtml(err && err.message ? err.message : String(err))}. This almost always means camera access isn't available here — try opening the downloaded file directly in your phone or computer's browser rather than inside Claude's preview panel, or just use the manual entry field below.</div>`;
+    document.getElementById('btnStartScan').style.display = 'inline-block';
+    document.getElementById('btnStopScan').style.display = 'none';
+    document.getElementById('scanHint').style.display = 'none';
+    html5QrCodeInstance = null;
+  }
+};
+
+document.getElementById('btnStopScan').onclick = stopScan;
+
+document.getElementById('btnScanManual').onclick = ()=>{
+  const val = document.getElementById('scanManualInput').value.trim();
+  if(!val){ alert('Type a serial first.'); return; }
+  handleScannedSerial(val);
+  document.getElementById('scanManualInput').value = '';
+};
+document.getElementById('scanManualInput').addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter') document.getElementById('btnScanManual').click();
+});
+
+async function onScanSuccess(decodedText){
+  await stopScan();
+  handleScannedSerial(decodedText);
+}
+
+function handleScannedSerial(rawText){
+  const ns = normSerial(rawText);
+  const el = document.getElementById('scanResult');
+
+  let found = assets.find(a => normSerial(a.serial) === ns);
+  let store = 'serial';
+  if(!found){ found = nextpAssets.find(a => normSerial(a.serial) === ns); store = 'nextp'; }
+  if(!found){ found = monitorAssets.find(a => normSerial(a.serial) === ns); store = 'monitors'; }
+
+  const storeLabel = {serial:'Laptop Inventory', nextp:'Active Laptops (NP)', monitors:'Monitors'};
+
+  if(found){
+    el.innerHTML = `
+      <div class="table-card" style="padding:16px;">
+        <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:10px;">Scanned <b>${escapeHtml(rawText)}</b> — found in <b>${storeLabel[store]}</b></div>
+        <div class="asset-name" style="margin-bottom:4px;">${escapeHtml(found.name)}</div>
+        <span class="tag ${found.status}">${store==='nextp' ? NP_STATUS_LABEL[found.status] : STATUS_LABEL[found.status]}</span>
+        <div class="modal-actions" style="justify-content:flex-start;margin-top:14px;">
+          <button class="btn btn-primary btn-sm" id="btnScanJump">Open record</button>
+        </div>
+      </div>
+    `;
+    document.getElementById('btnScanJump').onclick = ()=>{
+      if(store==='serial'){ showTab('serial'); openDetail(found.id); }
+      else if(store==='nextp'){ showTab('nextp'); openNextPDetail(found.id); }
+      else { showTab('monitors'); openMonitorDetail(found.id); }
+    };
+  } else {
+    el.innerHTML = `
+      <div class="table-card" style="padding:16px;">
+        <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:6px;">Scanned <b>${escapeHtml(rawText)}</b> — not found in any section.</div>
+        <div style="font-size:12px;color:var(--ink-faint);margin-bottom:12px;">Add it as a new record with this serial pre-filled:</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-ghost btn-sm" id="btnScanAddSerial">Add to Laptop Inventory</button>
+          <button class="btn btn-ghost btn-sm" id="btnScanAddNP">Add to Active Laptops (NP)</button>
+          <button class="btn btn-ghost btn-sm" id="btnScanAddMonitor">Add to Monitors</button>
+        </div>
+      </div>
+    `;
+    document.getElementById('btnScanAddSerial').onclick = ()=>{
+      showTab('serial');
+      openOverlay('addOverlay');
+      document.getElementById('f_serial').value = rawText;
+    };
+    document.getElementById('btnScanAddNP').onclick = ()=>{
+      showTab('nextp');
+      openOverlay('addNextPOverlay');
+      document.getElementById('np_serial').value = rawText;
+    };
+    document.getElementById('btnScanAddMonitor').onclick = ()=>{
+      showTab('monitors');
+      openOverlay('addMonitorOverlay');
+      document.getElementById('mon_serial').value = rawText;
+    };
+  }
+}
+
+
+function renderOverview(){
+  const bulkUnitTotal = bulkItems.reduce((sum,it)=> sum + bulkTotal(it) + (it.buckets.decommissioned||0), 0);
+  const grandTotal = assets.length + nextpAssets.length + monitorAssets.length + bulkUnitTotal;
+  document.getElementById('ov_grandTotal').textContent = grandTotal;
+
+  const sectionEl = document.getElementById('ov_sectionStats');
+  sectionEl.innerHTML = `
+    <div class="stat" style="--dot:${STATUS_DOT.available};cursor:pointer;" onclick="showTab('serial')"><span class="n">${assets.length}</span><span class="l">Laptop Inventory</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.provided};cursor:pointer;" onclick="showTab('nextp')"><span class="n">${nextpAssets.length}</span><span class="l">Active Laptops (NP)</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.retained};cursor:pointer;" onclick="showTab('monitors')"><span class="n">${monitorAssets.length}</span><span class="l">Monitors</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.damaged};cursor:pointer;" onclick="showTab('bulk')"><span class="n">${bulkUnitTotal}</span><span class="l">Bulk Stock (units)</span></div>
+  `;
+
+  const combined = {available:0,provided:0,retained:0,damaged:0,decommissioned:0,nonfunctional:0};
+  [assets, nextpAssets, monitorAssets].forEach(list=>{
+    list.forEach(a=>{ if(combined[a.status]!==undefined) combined[a.status]++; });
+  });
+  const statusEl = document.getElementById('ov_statusStats');
+  statusEl.innerHTML = `
+    <div class="stat" style="--dot:${STATUS_DOT.available}"><span class="n">${combined.available}</span><span class="l">Available</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.provided}"><span class="n">${combined.provided}</span><span class="l">Provided / Active</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.retained}"><span class="n">${combined.retained}</span><span class="l">Retained</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.damaged}"><span class="n">${combined.damaged}</span><span class="l">Damaged</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.decommissioned}"><span class="n">${combined.decommissioned}</span><span class="l">Decommissioned</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.nonfunctional}"><span class="n">${combined.nonfunctional}</span><span class="l">Non-functional</span></div>
+  `;
+}
+
+/* ---- Monitors ---- */
+const MONITOR_DATA = [
+  ['Sceptre','N51F249BTK2229','Tampa Office',''],
+  ['Dell','','Tampa Office',''],
+  ['Sceptre','P02F249BTKB867','Tampa Office',''],
+  ['Sceptre','P37F248BTK7355','Tampa Office',''],
+  ['Sceptre','PO2F249BTKG060','Tampa Office',''],
+  ['Lenovo','1S66AEKCC1USUR609K06','Tampa Office',''],
+  ['Sceptre','N51F249BTK0231','Tampa Office',''],
+  ['Sceptre','S40F275BTYC799','Tampa Office',''],
+  ['Sceptre','PO2F249BTKF505','Tampa Office',''],
+  ['Sceptre','R54F248BTZ4638','Tampa Office',''],
+  ['Sceptre','S40F275BTY2741','Tampa Office',''],
+  ['Acer','MMTKRAA00110400B333W01','Tampa Office',''],
+  ['Sceptre','P02F249BTK2252','Tampa Office',''],
+  ['Sceptre','S41F275BTY2236','Tampa Office',''],
+  ['Acer','MMTGJAA00105306E708511','Tampa Office',''],
+  ['Acer','MMTGJAA00105306FF88511','Tampa Office',''],
+  ['Dell','','Tampa Office',''],
+  ['Sceptre','P02F249BTK3491','Tampa Office',''],
+  ['Acer','MMTGJAA00105306E718511','Tampa Office',''],
+  ['Sceptre','S40F275BTY2742','Tampa Office',''],
+  ['Sceptre','P02F249BTKE246','Tampa Office',''],
+  ['Dell','GN71-A06','Tampa Office',''],
+  ['Sceptre','P02F249BTKE251','Tampa Office',''],
+  ['Dell','U2421E','Tampa Office',''],
+  ['Samsung','092ŞHCPW602855R','Tampa Office',''],
+  ['Samsung','091WHCNW605564B','Tampa Office',''],
+  ['Sceptre','P02F249BTKF485','Tampa Office',''],
+  ['Sceptre','PO2F249BTKE252','Tampa Office',''],
+  ['Sceptre','P42F248BTK4981','Tampa Office',''],
+  ['Sceptre','PO2F249BTKE235','Tampa Office',''],
+  ['Acer','MMTERAA00121101F8F2401','Tampa Office',''],
+  ['Dell','','Tampa Office',''],
+  ['Samsung','CWCEH4CRA26198F','Tampa Office',''],
+  ['Dell','GNCI-A06','Tampa Office',''],
+  ['Acer','','Tampa Office','Received from Mary Gaylican'],
+  ['Sceptre','','Tampa Office','Received from Mary Gaylican — brand listed as "Spectre" on original list, likely means Sceptre']
+];
+
+let monitorAssets = [];
+let activeMonitorId = null;
+let pendingMonitorAction = null;
+
+function monUid(){ return 'MON-' + String(Math.floor(1000+Math.random()*9000)); }
+
+async function loadMonitorAssets(){
+  try{
+    const res = await window.storage.get('monitorAssets', true);
+    monitorAssets = res ? JSON.parse(res.value) : [];
+  }catch(e){
+    monitorAssets = [];
+  }
+  renderMonitors();
+}
+
+async function saveMonitorAssets(){
+  try{
+    await window.storage.set('monitorAssets', JSON.stringify(monitorAssets), true);
+  }catch(e){
+    console.error('Save failed', e);
+  }
+}
+
+function renderMonitors(){
+  renderMonitorStats();
+  renderMonitorCategoryFilter();
+  renderMonitorTable();
+  populateEmployeeDatalist();
+}
+
+function renderMonitorStats(){
+  const counts = {available:0,provided:0,retained:0,damaged:0,decommissioned:0,nonfunctional:0};
+  monitorAssets.forEach(a=>{ if(counts[a.status]!==undefined) counts[a.status]++; });
+  const el = document.getElementById('monitorStats');
+  el.innerHTML = `
+    <div class="stat" style="--dot:${STATUS_DOT.available}"><span class="n">${counts.available}</span><span class="l">Available</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.provided}"><span class="n">${counts.provided}</span><span class="l">Provided</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.retained}"><span class="n">${counts.retained}</span><span class="l">Retained</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.damaged}"><span class="n">${counts.damaged}</span><span class="l">Damaged</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.decommissioned}"><span class="n">${counts.decommissioned}</span><span class="l">Decommissioned</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.nonfunctional}"><span class="n">${counts.nonfunctional}</span><span class="l">Non-functional</span></div>
+  `;
+}
+
+function renderMonitorCategoryFilter(){
+  const sel = document.getElementById('monitorFilterCategory');
+  const current = sel.value;
+  const cats = [...new Set(monitorAssets.map(a=>a.category).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">All brands</option>' + cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+  sel.value = current;
+}
+
+function renderMonitorTable(){
+  const search = document.getElementById('monitorSearch').value.toLowerCase();
+  const fStatus = document.getElementById('monitorFilterStatus').value;
+  const fCategory = document.getElementById('monitorFilterCategory').value;
+
+  let list = monitorAssets.filter(a=>{
+    if(fStatus && a.status !== fStatus) return false;
+    if(fCategory && a.category !== fCategory) return false;
+    if(search){
+      const hay = [a.name,a.id,a.serial,a.assigned,a.location].join(' ').toLowerCase();
+      if(!hay.includes(search)) return false;
+    }
+    return true;
+  }).sort((a,b)=> (b.updated||'').localeCompare(a.updated||''));
+
+  const tbody = document.getElementById('monitorTbody');
+  const emptyState = document.getElementById('monitorEmptyState');
+
+  if(list.length===0){
+    tbody.innerHTML='';
+    emptyState.style.display='block';
+    return;
+  }
+  emptyState.style.display='none';
+
+  tbody.innerHTML = list.map(a=>`
+    <tr onclick="openMonitorDetail('${a.id}')">
+      <td>
+        <div class="asset-name">${escapeHtml(a.name)}</div>
+        <div class="asset-id">${a.id}${a.serial ? ' · <span class=\"asset-serial\">'+escapeHtml(a.serial)+'</span>' : ''}</div>
+      </td>
+      <td>${escapeHtml(a.category||'—')}</td>
+      <td><span class="tag ${a.status}">${STATUS_LABEL[a.status]}</span></td>
+      <td>${escapeHtml(a.assigned||'—')}</td>
+      <td>${escapeHtml(a.location||'—')}</td>
+      <td>${a.updated ? fmtDate(a.updated) : '—'}</td>
+    </tr>
+  `).join('');
+}
+
+async function importTampaMonitors(silent){
+  const existingSerials = new Set(monitorAssets.map(a=>a.serial).filter(Boolean));
+  let added = 0, skipped = 0;
+  MONITOR_DATA.forEach(row=>{
+    const [brand, serial, location, notes] = row;
+    if(serial && existingSerials.has(serial)){ skipped++; return; }
+    const monitor = {
+      id: monUid(),
+      name: brand + ' Monitor',
+      category: brand,
+      serial: serial || '',
+      status: 'available',
+      assigned: '',
+      location,
+      history: [],
+      updated: today()
+    };
+    let detail = 'Bulk import — Tampa Office monitor inventory';
+    if(notes) detail += ` — ${notes}`;
+    addHistory(monitor, 'Added to stock', detail);
+    monitorAssets.push(monitor);
+    if(serial) existingSerials.add(serial);
+    added++;
+  });
+  await saveMonitorAssets();
+  renderMonitors();
+  if(!silent) alert(`Imported ${added} monitor(s)${skipped ? ', skipped '+skipped+' already in ledger' : ''}.`);
+  return added;
+}
+document.getElementById('btnImportMonitors').onclick = ()=> importTampaMonitors(false);
+
+/* ---- Add monitor ---- */
+document.getElementById('btnAddMonitor').onclick = ()=> openOverlay('addMonitorOverlay');
+
+document.getElementById('btnSaveMonitor').onclick = async ()=>{
+  const brand = document.getElementById('mon_brand').value.trim();
+  if(!brand){ alert('Give the monitor a brand first.'); return; }
+  const status = document.getElementById('mon_status').value;
+  const monitor = {
+    id: monUid(),
+    name: brand + ' Monitor',
+    category: brand,
+    serial: document.getElementById('mon_serial').value.trim(),
+    status,
+    assigned: status==='provided' ? document.getElementById('mon_assigned').value.trim() : '',
+    location: document.getElementById('mon_location').value.trim(),
+    history: [],
+    updated: today()
+  };
+  const note = document.getElementById('mon_notes').value.trim();
+  addHistory(monitor, 'Added to ledger', note);
+  monitorAssets.push(monitor);
+  await saveMonitorAssets();
+  renderMonitors();
+  closeOverlay('addMonitorOverlay');
+  ['mon_brand','mon_serial','mon_assigned','mon_location','mon_notes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('mon_status').value='available';
+};
+
+/* ---- Monitor detail / lifecycle actions ---- */
+function openMonitorDetail(id){
+  activeMonitorId = id;
+  const a = monitorAssets.find(x=>x.id===id);
+  if(!a) return;
+  document.getElementById('mon_d_id').textContent = a.id;
+  document.getElementById('mon_d_name').textContent = a.name;
+  const statusEl = document.getElementById('mon_d_status');
+  statusEl.className = 'tag ' + a.status;
+  statusEl.textContent = STATUS_LABEL[a.status];
+  document.getElementById('mon_d_brand').textContent = a.category || '—';
+  document.getElementById('mon_d_serial').textContent = a.serial || '—';
+  document.getElementById('mon_d_assigned').textContent = a.assigned || '—';
+  document.getElementById('mon_d_location').textContent = a.location || '—';
+
+  renderMonitorActionRow(a);
+  document.getElementById('mon_subFormZone').innerHTML = '';
+  renderMonitorTimeline(a);
+  openOverlay('monitorDetailOverlay');
+}
+
+function renderMonitorActionRow(a){
+  const row = document.getElementById('mon_actionRow');
+  const buttons = getMonitorActionButtons(a.status);
+  row.innerHTML = buttons.map(b=>`<button class="btn btn-sm ${b.cls}" data-action="${b.action}">${b.label}</button>`).join('') ||
+    '<span style="font-size:12.5px;color:var(--ink-faint);">Non-functional — retired for good, no further actions.</span>';
+  row.querySelectorAll('button[data-action]').forEach(btn=>{
+    btn.onclick = ()=> showMonitorSubForm(btn.dataset.action);
+  });
+}
+
+function getMonitorActionButtons(status){
+  if(status==='available') return [{label:'Provide', cls:'btn-accent', action:'provide'},{label:'Retain', cls:'btn-ghost', action:'retain'},{label:'Mark damaged', cls:'btn-warn', action:'damage'}];
+  if(status==='provided') return [{label:'Collect', cls:'btn-ghost', action:'collect'},{label:'Transfer', cls:'btn-accent', action:'transfer'},{label:'Mark damaged', cls:'btn-warn', action:'damage'},{label:'Decommission', cls:'btn-decom', action:'decommission'}];
+  if(status==='retained') return [{label:'Provide', cls:'btn-accent', action:'provide'},{label:'Mark damaged', cls:'btn-warn', action:'damage'},{label:'Decommission', cls:'btn-decom', action:'decommission'}];
+  if(status==='damaged') return [{label:'Mark repaired', cls:'btn-accent', action:'repair'},{label:'Mark non-functional', cls:'btn-nonfunc', action:'nonfunctional'}];
+  if(status==='decommissioned') return [{label:'Provide', cls:'btn-accent', action:'provide'},{label:'Retain', cls:'btn-ghost', action:'retain'},{label:'Mark damaged', cls:'btn-warn', action:'damage'}];
+  return [];
+}
+
+function showMonitorSubForm(action){
+  pendingMonitorAction = action;
+  const zone = document.getElementById('mon_subFormZone');
+  const needsPerson = action==='provide' || action==='transfer';
+  zone.innerHTML = `
+    <div class="sub-form">
+      ${needsPerson ? `<div class="field"><label>${action==='transfer'?'New assignee':'Assign to'}</label><input type="text" id="mon_sf_person" placeholder="Person name" list="employeeNamesList"></div>` : ''}
+      <div class="field"><label>Notes</label><textarea id="mon_sf_notes" placeholder="Optional detail for the log"></textarea></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost btn-sm" id="mon_sf_cancel">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="mon_sf_confirm">Confirm</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('mon_sf_cancel').onclick = ()=>{ zone.innerHTML=''; pendingMonitorAction=null; };
+  document.getElementById('mon_sf_confirm').onclick = confirmMonitorAction;
+}
+
+async function confirmMonitorAction(){
+  const a = monitorAssets.find(x=>x.id===activeMonitorId);
+  if(!a) return;
+  const notesEl = document.getElementById('mon_sf_notes');
+  const notes = notesEl ? notesEl.value.trim() : '';
+  const personEl = document.getElementById('mon_sf_person');
+  const person = personEl ? personEl.value.trim() : '';
+
+  switch(pendingMonitorAction){
+    case 'provide':
+      a.status='provided'; a.assigned = person || a.assigned || 'Unassigned';
+      addHistory(a,'Provided', person ? `Assigned to ${person}` : notes);
+      break;
+    case 'collect':
+      addHistory(a,'Collected', `Returned from ${a.assigned || 'assignee'}${notes ? ' — '+notes : ''}`);
+      a.status='available'; a.assigned='';
+      break;
+    case 'transfer':
+      const prev = a.assigned || 'previous holder';
+      a.assigned = person || a.assigned;
+      addHistory(a,'Transferred', `From ${prev} to ${a.assigned}${notes ? ' — '+notes : ''}`);
+      break;
+    case 'retain':
+      a.status='retained';
+      addHistory(a,'Retained', notes || 'Moved to storage');
+      break;
+    case 'damage':
+      a.status='damaged';
+      addHistory(a,'Marked damaged', notes || 'No detail provided');
+      break;
+    case 'repair':
+      a.status='available';
+      addHistory(a,'Marked repaired', notes || 'Returned to available pool');
+      break;
+    case 'decommission':
+      a.status='decommissioned'; a.assigned='';
+      addHistory(a,'Decommissioned', notes || 'Returned to pool, ready to reissue');
+      break;
+    case 'nonfunctional':
+      a.status='nonfunctional'; a.assigned='';
+      addHistory(a,'Marked non-functional', notes || 'Beyond repair — retired for good');
+      break;
+  }
+  await saveMonitorAssets();
+  document.getElementById('mon_subFormZone').innerHTML='';
+  pendingMonitorAction=null;
+  openMonitorDetail(a.id);
+  renderMonitors();
+}
+
+function renderMonitorTimeline(a){
+  const el = document.getElementById('mon_timeline');
+  const hist = a.history || [];
+  if(hist.length===0){ el.innerHTML = '<div style="color:var(--ink-faint);font-size:12.5px;">No activity logged yet.</div>'; return; }
+  el.innerHTML = hist.map(h=>`
+    <div class="tl-item">
+      <div class="tl-dot"></div>
+      <div class="tl-body">
+        <b>${escapeHtml(h.action)}</b>
+        <div class="tl-meta">${fmtDate(h.date)}</div>
+        ${h.detail ? `<div class="tl-note">${escapeHtml(h.detail)}</div>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+document.getElementById('monitorSearch').addEventListener('input', renderMonitorTable);
+document.getElementById('monitorFilterStatus').addEventListener('change', renderMonitorTable);
+document.getElementById('monitorFilterCategory').addEventListener('change', renderMonitorTable);
+
+/* ---- Onboarding ---- */
+let onboardingCases = [];
+let activeOnboardId = null;
+
+function onbUid(){ return 'ONB-' + String(Math.floor(1000+Math.random()*9000)); }
+
+async function loadOnboardingCases(){
+  try{
+    const res = await window.storage.get('onboardingCases', true);
+    onboardingCases = res ? JSON.parse(res.value) : [];
+  }catch(e){
+    onboardingCases = [];
+  }
+}
+
+async function saveOnboardingCases(){
+  try{
+    await window.storage.set('onboardingCases', JSON.stringify(onboardingCases), true);
+  }catch(e){
+    console.error('Save failed', e);
+  }
+}
+
+function addCaseHistory(c, action, detail){
+  c.history = c.history || [];
+  c.history.unshift({date: today(), action, detail: detail || ''});
+  c.updated = today();
+}
+
+document.getElementById('btnOnboardStart').onclick = async ()=>{
+  const name = document.getElementById('onboardNameInput').value.trim();
+  if(!name){ alert('Enter the new employee\'s name first.'); return; }
+  const nn = normName(name);
+  let c = onboardingCases.find(x=> normName(x.employeeName)===nn && !x.steps.onboardingSuccessful);
+  if(!c){
+    c = {
+      id: onbUid(),
+      employeeName: name,
+      steps: {identityCreated:false, equipmentAssigned:false, accessProvided:false, onboardingSuccessful:false},
+      assignedAssetId: null,
+      assignedAssetSummary: '',
+      history: [],
+      created: today(),
+      updated: today()
+    };
+    addCaseHistory(c, 'Onboarding started', `New hire case created for ${name}`);
+    onboardingCases.push(c);
+    await saveOnboardingCases();
+  }
+  activeOnboardId = c.id;
+  renderOnboardCase();
+};
+
+function cancelOnboardTracking(){
+  activeOnboardId = null;
+  document.getElementById('onboardResults').innerHTML = '';
+  document.getElementById('onboardNameInput').value = '';
+}
+
+function onboardStepRow(stepKey, label, stepNumber, unlocked, done){
+  let inner;
+  if(!unlocked){
+    inner = `<span style="color:var(--ink-faint);">Complete the previous step first</span>`;
+  } else if(done){
+    inner = `<span style="color:var(--ink-faint);">— done</span>`;
+  } else if(stepKey === 'equipmentAssigned'){
+    inner = `
+      <div class="sub-form" style="margin-top:8px;">
+        <div class="field"><label>Serial ID to assign (from Laptop Inventory)</label><input type="text" id="onb_serialInput" placeholder="e.g. 4YG4G64"></div>
+        <div id="onb_assignError" style="font-size:12.5px;color:var(--warn);margin-bottom:8px;"></div>
+        <div class="modal-actions" style="justify-content:flex-start;">
+          <button class="btn btn-primary btn-sm" id="onb_assignBtn">Assign equipment</button>
+        </div>
+      </div>`;
+  } else {
+    inner = `<button class="btn btn-accent btn-sm" data-step="${stepKey}">Mark done</button>`;
+  }
+  return `
+    <div style="padding:12px 0;border-bottom:1px solid var(--line);">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:700;
+          background:${done?'var(--accent)':'var(--line)'};color:${done?'#fff':'var(--ink-faint)'};flex-shrink:0;">${done?'✓':stepNumber}</span>
+        <b style="font-size:13.5px;">${label}</b>
+      </div>
+      <div style="margin-left:32px;margin-top:6px;">${inner}</div>
+    </div>
+  `;
+}
+
+function renderOnboardCase(){
+  const c = onboardingCases.find(x=>x.id===activeOnboardId);
+  const el = document.getElementById('onboardResults');
+  if(!c){ el.innerHTML=''; return; }
+  const s = c.steps;
+
+  if(s.onboardingSuccessful){
+    el.innerHTML = `<div class="empty" style="display:block;"><b>Onboarding complete</b>${escapeHtml(c.employeeName)} — identity created, ${escapeHtml(c.assignedAssetSummary||'equipment assigned')}, access provided. All set.</div>`;
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="table-card" style="padding:20px;">
+      <div class="detail-head">
+        <div>
+          <div class="eyebrow">${c.id}</div>
+          <h2 style="margin:2px 0 0;font-family:'Space Grotesk',sans-serif;font-size:19px;">${escapeHtml(c.employeeName)}</h2>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="btnOnboardCancel">Cancel</button>
+      </div>
+      ${c.assignedAssetSummary ? `<div style="font-size:12.5px;color:var(--ink-soft);margin:10px 0 4px;">Assigned: <b>${escapeHtml(c.assignedAssetSummary)}</b> — moved to Active Laptops (NP)</div>` : ''}
+      <div style="margin-top:14px;">
+        ${onboardStepRow('identityCreated','Identity created',1, true, s.identityCreated)}
+        ${onboardStepRow('equipmentAssigned','Equipment assigned',2, s.identityCreated, s.equipmentAssigned)}
+        ${onboardStepRow('accessProvided','Required access provided',3, s.equipmentAssigned, s.accessProvided)}
+        ${onboardStepRow('onboardingSuccessful','Onboarding successful',4, s.accessProvided, s.onboardingSuccessful)}
+      </div>
+      <div class="actions-title">History</div>
+      <div class="timeline">${(c.history && c.history.length) ? c.history.map(h=>`
+        <div class="tl-item">
+          <div class="tl-dot"></div>
+          <div class="tl-body">
+            <b>${escapeHtml(h.action)}</b>
+            <div class="tl-meta">${fmtDate(h.date)}</div>
+            ${h.detail ? `<div class="tl-note">${escapeHtml(h.detail)}</div>` : ''}
+          </div>
+        </div>
+      `).join('') : '<div style="color:var(--ink-faint);font-size:12.5px;">No activity logged yet.</div>'}</div>
+    </div>
+  `;
+
+  document.getElementById('btnOnboardCancel').onclick = cancelOnboardTracking;
+
+  document.querySelectorAll('#onboardResults button[data-step]').forEach(btn=>{
+    btn.onclick = ()=> markOnboardStepDone(btn.dataset.step);
+  });
+
+  const assignBtn = document.getElementById('onb_assignBtn');
+  if(assignBtn) assignBtn.onclick = assignOnboardEquipment;
+}
+
+async function markOnboardStepDone(stepKey){
+  const c = onboardingCases.find(x=>x.id===activeOnboardId);
+  if(!c) return;
+  c.steps[stepKey] = true;
+  const labels = {
+    identityCreated: ['Identity created', 'New hire identity/accounts created'],
+    accessProvided: ['Required access provided', 'System and application access granted'],
+    onboardingSuccessful: ['Onboarding successful', `Onboarding complete for ${c.employeeName}`]
+  };
+  const [label, detail] = labels[stepKey] || [stepKey, ''];
+  addCaseHistory(c, label, detail);
+  await saveOnboardingCases();
+  renderOnboardCase();
+}
+
+async function assignOnboardEquipment(){
+  const c = onboardingCases.find(x=>x.id===activeOnboardId);
+  if(!c) return;
+  const input = document.getElementById('onb_serialInput');
+  const errEl = document.getElementById('onb_assignError');
+  const serial = input.value.trim();
+  errEl.textContent = '';
+  if(!serial){ errEl.textContent = 'Enter a serial ID first.'; return; }
+
+  const ns = normSerial(serial);
+  const asset = assets.find(a => normSerial(a.serial) === ns);
+  if(!asset){
+    errEl.textContent = `No equipment with that serial found in Laptop Inventory.`;
+    return;
+  }
+  if(!['available','retained','decommissioned'].includes(asset.status)){
+    errEl.textContent = `That equipment is currently "${STATUS_LABEL[asset.status]}" — not available to assign.`;
+    return;
+  }
+
+  // Assign and move, same behavior as Provide + NP-supported from Laptop Inventory
+  asset.status = 'provided';
+  asset.assigned = c.employeeName;
+  addHistory(asset, 'Provided', `Onboarding — assigned to new hire ${c.employeeName}`);
+  assets = assets.filter(x=>x.id !== asset.id);
+  addHistory(asset, 'Moved to Active Laptops (NP)', `Onboarding — reissued to ${c.employeeName}, now under Next Perimeter support`);
+  asset.location = asset.location || 'GroundGame Health – Main (Next Perimeter)';
+  nextpAssets.push(asset);
+  await saveAssets();
+  await saveNextPAssets();
+  render();
+  renderNextP();
+
+  c.steps.equipmentAssigned = true;
+  c.assignedAssetId = asset.id;
+  c.assignedAssetSummary = `${asset.name} — ${asset.serial}`;
+  addCaseHistory(c, 'Equipment assigned', `${asset.name} (${asset.serial}) — moved to Active Laptops (NP)`);
+  await saveOnboardingCases();
+  renderOnboardCase();
+}
+
+/* ---- Offboarding ---- */
+let offboardActiveId = null;
+let pendingOffboardAction = null;
+
+document.getElementById('btnOffboardFind').onclick = ()=>{
+  const query = document.getElementById('offboardSearch').value.trim();
+  if(!query){ alert('Enter an employee name first.'); return; }
+  const nn = normName(query);
+  const matches = nextpAssets.filter(a=>{
+    const an = normName(a.assigned);
+    return an && (an.includes(nn) || nn.includes(an));
+  });
+  renderOffboardResults(matches, query);
+};
+
+function renderOffboardResults(matches, query){
+  const el = document.getElementById('offboardResults');
+  if(matches.length === 0){
+    el.innerHTML = `<div class="empty" style="display:block;"><b>No laptop found</b>No Active Laptops (NP) record matches "${escapeHtml(query)}".</div>`;
+    offboardActiveId = null;
+    return;
+  }
+  if(matches.length > 1){
+    el.innerHTML = `<div class="table-card" style="padding:16px;">
+      <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:10px;">Multiple matches — pick the right one:</div>
+      ${matches.map(a=>`<button class="btn btn-ghost btn-sm" style="margin:3px;" data-pick="${a.id}">${escapeHtml(a.name)} — ${escapeHtml(a.serial||'no serial')}</button>`).join('')}
+    </div>`;
+    el.querySelectorAll('button[data-pick]').forEach(btn=>{
+      btn.onclick = ()=> selectOffboardAsset(btn.dataset.pick);
+    });
+    return;
+  }
+  selectOffboardAsset(matches[0].id);
+}
+
+function selectOffboardAsset(id){
+  offboardActiveId = id;
+  renderOffboardPreview();
+}
+
+function cancelOffboardTracking(){
+  offboardActiveId = null;
+  pendingOffboardAction = null;
+  document.getElementById('offboardResults').innerHTML = '';
+  document.getElementById('offboardSearch').value = '';
+}
+
+function renderOffboardPreview(){
+  const a = nextpAssets.find(x=>x.id===offboardActiveId);
+  const el = document.getElementById('offboardResults');
+  if(!a){ el.innerHTML=''; return; }
+
+  el.innerHTML = `
+    <div class="table-card" style="padding:20px;">
+      <div class="detail-head">
+        <div>
+          <div class="eyebrow">${a.id}</div>
+          <h2 style="margin:2px 0 0;font-family:'Space Grotesk',sans-serif;font-size:19px;">${escapeHtml(a.name)}</h2>
+        </div>
+        <span class="tag ${a.status}">${NP_STATUS_LABEL[a.status]}</span>
+      </div>
+      <div class="detail-meta">
+        <div><div class="k">Category</div><div class="v">${escapeHtml(a.category||'—')}</div></div>
+        <div><div class="k">Serial</div><div class="v">${escapeHtml(a.serial||'—')}</div></div>
+        <div><div class="k">Assigned to</div><div class="v">${escapeHtml(a.assigned||'—')}</div></div>
+        <div><div class="k">Location</div><div class="v">${escapeHtml(a.location||'—')}</div></div>
+      </div>
+      <div class="modal-actions" style="justify-content:flex-start;margin-top:16px;">
+        <button class="btn btn-primary btn-sm" id="btnOffboardTrack">Track</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('btnOffboardTrack').onclick = renderOffboardCard;
+}
+
+function offboardCheckboxHtml(a, key, label){
+  const checked = !!(a.offboarding && a.offboarding[key]);
+  return `<label style="display:flex;align-items:center;gap:9px;padding:9px 0;font-size:13.5px;border-bottom:1px solid var(--line);">
+    <input type="checkbox" id="ob_${key}" ${checked ? 'checked disabled' : ''}>
+    ${label}${checked ? ' <span style="color:var(--ink-faint);font-size:11.5px;">— done</span>' : ''}
+  </label>`;
+}
+
+function offboardActionButtons(status){
+  if(status==='available') return [{label:'Mark active', cls:'btn-accent', action:'provide'},{label:'Retain', cls:'btn-ghost', action:'retain'},{label:'Mark damaged', cls:'btn-warn', action:'damage'}];
+  if(status==='provided') return [{label:'Collect', cls:'btn-ghost', action:'collect'},{label:'Transfer', cls:'btn-accent', action:'transfer'},{label:'Swap', cls:'btn-warn', action:'swap'},{label:'Mark damaged', cls:'btn-warn', action:'damage'},{label:'Decommission (employee left)', cls:'btn-decom', action:'decommission'}];
+  if(status==='retained') return [{label:'Mark active', cls:'btn-accent', action:'provide'},{label:'Mark damaged', cls:'btn-warn', action:'damage'}];
+  if(status==='damaged') return [{label:'Mark repaired', cls:'btn-accent', action:'repair'},{label:'Mark non-functional', cls:'btn-nonfunc', action:'nonfunctional'}];
+  if(status==='decommissioned') return [{label:'Mark active', cls:'btn-accent', action:'provide'},{label:'Retain', cls:'btn-ghost', action:'retain'},{label:'Mark damaged', cls:'btn-warn', action:'damage'}];
+  return [];
+}
+
+function renderOffboardCard(){
+  const a = nextpAssets.find(x=>x.id===offboardActiveId);
+  const el = document.getElementById('offboardResults');
+  if(!a){ el.innerHTML=''; return; }
+  a.offboarding = a.offboarding || {removedAccess:false, laptopReceived:false, laptopRetained:false, laptopDecommissioned:false};
+
+  const buttons = offboardActionButtons(a.status);
+  const actionRowHtml = buttons.map(b=>`<button class="btn btn-sm ${b.cls}" data-action="${b.action}">${b.label}</button>`).join('') ||
+    '<span style="font-size:12.5px;color:var(--ink-faint);">Non-functional — retired for good, no further actions.</span>';
+
+  el.innerHTML = `
+    <div class="table-card" style="padding:20px;">
+      <div class="detail-head">
+        <div>
+          <div class="eyebrow">${a.id}</div>
+          <h2 style="margin:2px 0 0;font-family:'Space Grotesk',sans-serif;font-size:19px;">${escapeHtml(a.name)}</h2>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="tag ${a.status}">${NP_STATUS_LABEL[a.status]}</span>
+          <button class="btn btn-ghost btn-sm" id="btnOffboardCancel">Cancel</button>
+        </div>
+      </div>
+      <div class="detail-meta">
+        <div><div class="k">Category</div><div class="v">${escapeHtml(a.category||'—')}</div></div>
+        <div><div class="k">Serial</div><div class="v">${escapeHtml(a.serial||'—')}</div></div>
+        <div><div class="k">Assigned to</div><div class="v">${escapeHtml(a.assigned||'—')}</div></div>
+        <div><div class="k">Location</div><div class="v">${escapeHtml(a.location||'—')}</div></div>
+      </div>
+      <div class="actions-title">Log activity</div>
+      <div class="action-row" id="ob_actionRow">${actionRowHtml}</div>
+      <div id="ob_subFormZone"></div>
+      <div class="actions-title">Offboarding checklist</div>
+      <div>
+        ${offboardCheckboxHtml(a, 'removedAccess', 'Removed access')}
+        ${offboardCheckboxHtml(a, 'laptopReceived', 'Laptop received')}
+        ${offboardCheckboxHtml(a, 'laptopRetained', 'Laptop retained')}
+        ${offboardCheckboxHtml(a, 'laptopDecommissioned', 'Laptop decommissioned')}
+      </div>
+      <div class="actions-title">History</div>
+      <div class="timeline">${(a.history && a.history.length) ? a.history.map(h=>`
+        <div class="tl-item">
+          <div class="tl-dot"></div>
+          <div class="tl-body">
+            <b>${escapeHtml(h.action)}</b>
+            <div class="tl-meta">${fmtDate(h.date)}</div>
+            ${h.detail ? `<div class="tl-note">${escapeHtml(h.detail)}</div>` : ''}
+          </div>
+        </div>
+      `).join('') : '<div style="color:var(--ink-faint);font-size:12.5px;">No activity logged yet.</div>'}</div>
+    </div>
+  `;
+
+  document.querySelectorAll('#ob_actionRow button[data-action]').forEach(btn=>{
+    btn.onclick = ()=> showOffboardSubForm(btn.dataset.action);
+  });
+
+  document.getElementById('btnOffboardCancel').onclick = cancelOffboardTracking;
+
+  ['removedAccess','laptopReceived','laptopRetained','laptopDecommissioned'].forEach(key=>{
+    const cb = document.getElementById('ob_'+key);
+    if(cb && !cb.disabled){
+      cb.onchange = ()=> handleOffboardCheck(key);
+    }
+  });
+}
+
+function showOffboardSubForm(action){
+  pendingOffboardAction = action;
+  const zone = document.getElementById('ob_subFormZone');
+
+  if(action === 'swap'){
+    const options = nextpAssets.filter(x=> (x.status==='available' || x.status==='decommissioned') && x.id!==offboardActiveId);
+    if(options.length===0){
+      zone.innerHTML = `<div class="sub-form"><div style="font-size:12.5px;color:var(--warn);">No available laptops in Active Laptops (NP) to swap in right now.</div><div class="modal-actions"><button class="btn btn-ghost btn-sm" id="ob_sf_cancel">Close</button></div></div>`;
+      document.getElementById('ob_sf_cancel').onclick = ()=>{ zone.innerHTML=''; pendingOffboardAction=null; };
+      return;
+    }
+    zone.innerHTML = `
+      <div class="sub-form">
+        <div class="field"><label>Reason for swap (required)</label><textarea id="ob_sf_reason" placeholder="e.g. Screen cracked, won't power on..."></textarea></div>
+        <div class="field"><label>Replacement laptop (Available stock)</label>
+          <select id="ob_sf_replacement">
+            ${options.map(x=>`<option value="${x.id}">${escapeHtml(x.name)} — ${escapeHtml(x.serial||'no serial')}</option>`).join('')}
+          </select>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost btn-sm" id="ob_sf_cancel">Cancel</button>
+          <button class="btn btn-primary btn-sm" id="ob_sf_confirm">Confirm swap</button>
+        </div>
+      </div>
+    `;
+    document.getElementById('ob_sf_cancel').onclick = ()=>{ zone.innerHTML=''; pendingOffboardAction=null; };
+    document.getElementById('ob_sf_confirm').onclick = confirmOffboardSwap;
+    return;
+  }
+
+  const needsPerson = action==='provide' || action==='transfer';
+  zone.innerHTML = `
+    <div class="sub-form">
+      ${needsPerson ? `<div class="field"><label>${action==='transfer'?'New assignee':'Assign to'}</label><input type="text" id="ob_sf_person" placeholder="Person name" list="employeeNamesList"></div>` : ''}
+      <div class="field"><label>Notes</label><textarea id="ob_sf_notes" placeholder="Optional detail for the log"></textarea></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost btn-sm" id="ob_sf_cancel">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="ob_sf_confirm">Confirm</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('ob_sf_cancel').onclick = ()=>{ zone.innerHTML=''; pendingOffboardAction=null; };
+  document.getElementById('ob_sf_confirm').onclick = confirmOffboardAction;
+}
+
+async function confirmOffboardAction(){
+  const a = nextpAssets.find(x=>x.id===offboardActiveId);
+  if(!a) return;
+  const notesEl = document.getElementById('ob_sf_notes');
+  const notes = notesEl ? notesEl.value.trim() : '';
+  const personEl = document.getElementById('ob_sf_person');
+  const person = personEl ? personEl.value.trim() : '';
+
+  switch(pendingOffboardAction){
+    case 'provide':
+      a.status='provided'; a.assigned = person || a.assigned || 'Unassigned';
+      addHistory(a,'Marked active', person ? `Assigned to ${person}` : notes);
+      break;
+    case 'collect':
+      addHistory(a,'Collected', `Returned from ${a.assigned || 'assignee'}${notes ? ' — '+notes : ''}`);
+      a.status='available'; a.assigned='';
+      break;
+    case 'transfer':
+      const prev = a.assigned || 'previous holder';
+      a.assigned = person || a.assigned;
+      addHistory(a,'Transferred', `From ${prev} to ${a.assigned}${notes ? ' — '+notes : ''}`);
+      break;
+    case 'retain':
+      a.status='retained';
+      addHistory(a,'Retained', notes || 'Moved to storage');
+      break;
+    case 'damage':
+      a.status='damaged';
+      addHistory(a,'Marked damaged', notes || 'No detail provided');
+      break;
+    case 'repair':
+      a.status='available';
+      addHistory(a,'Marked repaired', notes || 'Returned to available pool');
+      break;
+    case 'decommission':
+      a.status='decommissioned'; a.assigned='';
+      addHistory(a,'Decommissioned', notes || 'Employee separation — laptop refreshed and returned to pool, ready to reissue');
+      break;
+    case 'nonfunctional':
+      a.status='nonfunctional'; a.assigned='';
+      addHistory(a,'Marked non-functional', notes || 'Beyond repair — retired for good');
+      break;
+  }
+
+  if(pendingOffboardAction === 'decommission'){
+    await moveNextPToSerializedAssets(a, 'Decommissioned via Offboarding — moved to Laptop Inventory, ready to reissue');
+    pendingOffboardAction=null;
+    document.getElementById('offboardResults').innerHTML = `<div class="empty" style="display:block;"><b>Offboarding complete</b>${escapeHtml(a.name)} was decommissioned and moved to Laptop Inventory.</div>`;
+    offboardActiveId = null;
+    document.getElementById('offboardSearch').value = '';
+    return;
+  }
+
+  await saveNextPAssets();
+  document.getElementById('ob_subFormZone').innerHTML='';
+  pendingOffboardAction=null;
+  renderNextP();
+  renderOffboardCard();
+}
+
+async function confirmOffboardSwap(){
+  const oldAsset = nextpAssets.find(x=>x.id===offboardActiveId);
+  if(!oldAsset) return;
+  const reason = document.getElementById('ob_sf_reason').value.trim();
+  if(!reason){ alert('Please enter a reason for the swap — this is required.'); return; }
+  const replacementId = document.getElementById('ob_sf_replacement').value;
+  const newAsset = nextpAssets.find(x=>x.id===replacementId);
+  if(!newAsset) return;
+
+  const person = oldAsset.assigned || 'the employee';
+  addHistory(oldAsset, 'Swapped out', `Reason: ${reason} — replaced by ${newAsset.name} (${newAsset.serial||'no serial'})`);
+  oldAsset.status = 'damaged';
+  addHistory(newAsset, 'Swapped in', `Reason: ${reason} — replacing ${oldAsset.name} (${oldAsset.serial||'no serial'}), assigned to ${person}`);
+  newAsset.status = 'provided';
+  newAsset.assigned = person;
+
+  await saveNextPAssets();
+  document.getElementById('ob_subFormZone').innerHTML='';
+  pendingOffboardAction=null;
+  renderNextP();
+  renderOffboardCard();
+}
+
+async function handleOffboardCheck(key){
+  const a = nextpAssets.find(x=>x.id===offboardActiveId);
+  if(!a) return;
+  a.offboarding = a.offboarding || {removedAccess:false, laptopReceived:false, laptopRetained:false, laptopDecommissioned:false};
+  a.offboarding[key] = true;
+
+  if(key === 'removedAccess'){
+    addHistory(a, 'Removed access', 'Offboarding — access/accounts revoked');
+  } else if(key === 'laptopReceived'){
+    addHistory(a, 'Laptop received', `Offboarding — received back from ${a.assigned || 'employee'}`);
+    a.status = 'retained';
+    a.assigned = '';
+  } else if(key === 'laptopRetained'){
+    addHistory(a, 'Laptop retained', 'Offboarding — held in storage');
+    a.status = 'retained';
+  } else if(key === 'laptopDecommissioned'){
+    addHistory(a, 'Laptop decommissioned', 'Offboarding — refreshed and returned to pool, ready to reissue');
+    a.status = 'decommissioned';
+    a.assigned = '';
+  }
+
+  if(key === 'laptopDecommissioned'){
+    await moveNextPToSerializedAssets(a, 'Decommissioned via Offboarding checklist — moved to Laptop Inventory, ready to reissue');
+    document.getElementById('offboardResults').innerHTML = `<div class="empty" style="display:block;"><b>Offboarding complete</b>${escapeHtml(a.name)} was decommissioned and moved to Laptop Inventory.</div>`;
+    offboardActiveId = null;
+    document.getElementById('offboardSearch').value = '';
+    return;
+  }
+
+  await saveNextPAssets();
+  renderNextP();
+  renderOffboardCard();
+}
+
+function uid(){ return 'AST-' + String(Math.floor(1000+Math.random()*9000)); }
+function today(){ return new Date().toISOString().slice(0,10); }
+function fmtDate(d){
+  const dt = new Date(d+'T00:00:00');
+  return dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+}
+
+async function loadAssets(){
+  try{
+    const res = await window.storage.get('assets', true);
+    assets = res ? JSON.parse(res.value) : [];
+  }catch(e){
+    assets = [];
+  }
+  render();
+}
+
+async function saveAssets(){
+  try{
+    await window.storage.set('assets', JSON.stringify(assets), true);
+  }catch(e){
+    console.error('Save failed', e);
+  }
+}
+
+function addHistory(asset, action, detail){
+  asset.history = asset.history || [];
+  asset.history.unshift({date: today(), action, detail: detail || ''});
+  asset.updated = today();
+}
+
+function render(){
+  renderStats();
+  renderCategoryFilter();
+  renderTable();
+  populateEmployeeDatalist();
+}
+
+function populateEmployeeDatalist(){
+  const el = document.getElementById('employeeNamesList');
+  if(!el) return;
+  const names = new Set();
+  [assets, nextpAssets, monitorAssets].forEach(list=>{
+    (list||[]).forEach(a=>{ if(a.assigned && a.assigned.trim()) names.add(a.assigned.trim()); });
+  });
+  el.innerHTML = [...names].sort().map(n=>`<option value="${escapeHtml(n)}">`).join('');
+}
+
+function renderStats(){
+  const counts = {available:0,provided:0,retained:0,damaged:0,decommissioned:0,nonfunctional:0};
+  assets.forEach(a=>{ if(counts[a.status]!==undefined) counts[a.status]++; });
+  const el = document.getElementById('stats');
+  el.innerHTML = `
+    <div class="stat" style="--dot:var(--ink)"><span class="n">${assets.length}</span><span class="l">Total equipment</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.available}"><span class="n">${counts.available}</span><span class="l">Available</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.provided}"><span class="n">${counts.provided}</span><span class="l">Provided</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.retained}"><span class="n">${counts.retained}</span><span class="l">Retained</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.damaged}"><span class="n">${counts.damaged}</span><span class="l">Damaged</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.decommissioned}"><span class="n">${counts.decommissioned}</span><span class="l">Decommissioned</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.nonfunctional}"><span class="n">${counts.nonfunctional}</span><span class="l">Non-functional</span></div>
+  `;
+}
+
+function renderCategoryFilter(){
+  const sel = document.getElementById('filterCategory');
+  const current = sel.value;
+  const cats = [...new Set(assets.map(a=>a.category).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">All categories</option>' + cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+  sel.value = current;
+}
+
+function renderTable(){
+  const search = document.getElementById('search').value.toLowerCase();
+  const fStatus = document.getElementById('filterStatus').value;
+  const fCategory = document.getElementById('filterCategory').value;
+
+  let list = assets.filter(a=>{
+    if(fStatus && a.status !== fStatus) return false;
+    if(fCategory && a.category !== fCategory) return false;
+    if(search){
+      const hay = [a.name,a.id,a.serial,a.assigned,a.location].join(' ').toLowerCase();
+      if(!hay.includes(search)) return false;
+    }
+    return true;
+  }).sort((a,b)=> (b.updated||'').localeCompare(a.updated||''));
+
+  const tbody = document.getElementById('tbody');
+  const emptyState = document.getElementById('emptyState');
+
+  if(list.length===0){
+    tbody.innerHTML='';
+    emptyState.style.display='block';
+    emptyState.querySelector('b').textContent = assets.length===0 ? 'No assets yet' : 'No matches';
+    emptyState.lastChild.textContent = assets.length===0 ? 'Add your first piece of equipment to start the ledger.' : 'Try a different search or filter.';
+    return;
+  }
+  emptyState.style.display='none';
+
+  tbody.innerHTML = list.map(a=>`
+    <tr onclick="openDetail('${a.id}')">
+      <td>
+        <div class="asset-name">${escapeHtml(a.name)}</div>
+        <div class="asset-id">${a.id}${a.serial ? ' · <span class=\"asset-serial\">'+escapeHtml(a.serial)+'</span>' : ''}</div>
+      </td>
+      <td>${escapeHtml(a.category||'—')}</td>
+      <td><span class="tag ${a.status}">${STATUS_LABEL[a.status]}</span></td>
+      <td>${escapeHtml(a.assigned||'—')}</td>
+      <td>${escapeHtml(a.location||'—')}</td>
+      <td>${a.updated ? fmtDate(a.updated) : '—'}</td>
+    </tr>
+  `).join('');
+}
+
+function escapeHtml(s){
+  if(!s) return '';
+  return s.replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+/* ---- Add asset ---- */
+document.getElementById('btnAdd').onclick = ()=> openOverlay('addOverlay');
+
+document.getElementById('btnSaveAsset').onclick = async ()=>{
+  const name = document.getElementById('f_name').value.trim();
+  if(!name){ alert('Give the asset a name first.'); return; }
+  const status = document.getElementById('f_status').value;
+  const asset = {
+    id: uid(),
+    name,
+    category: document.getElementById('f_category').value.trim(),
+    serial: document.getElementById('f_serial').value.trim(),
+    status,
+    assigned: status==='provided' ? document.getElementById('f_assigned').value.trim() : '',
+    location: document.getElementById('f_location').value.trim(),
+    history: [],
+    updated: today()
+  };
+  const note = document.getElementById('f_notes').value.trim();
+  addHistory(asset, 'Added to ledger', note);
+  assets.push(asset);
+  await saveAssets();
+  render();
+  closeOverlay('addOverlay');
+  ['f_name','f_category','f_serial','f_assigned','f_location','f_notes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f_status').value='available';
+};
+
+/* ---- Import ---- */
+document.getElementById('btnImport').onclick = ()=> openOverlay('importOverlay');
+
+async function importTampaLaptops(silent){
+  const existingSerials = new Set(assets.map(a=>a.serial).filter(Boolean));
+  let added = 0, skipped = 0;
+  TAMPA_LAPTOPS.forEach(row=>{
+    const [assigned, serial, category, notes] = row;
+    if(serial && existingSerials.has(serial)){ skipped++; return; }
+    const asset = {
+      id: uid(),
+      name: category + ' — ' + assigned,
+      category,
+      serial,
+      status: 'provided',
+      assigned,
+      location: 'Tampa Office',
+      history: [],
+      updated: today()
+    };
+    let detail = 'Bulk import — confirmed working condition, Tampa Office';
+    if(notes) detail += ` — ${notes}`;
+    addHistory(asset, 'Provided', detail);
+    assets.push(asset);
+    if(serial) existingSerials.add(serial);
+    added++;
+  });
+  await saveAssets();
+  render();
+  if(!silent) document.getElementById('tampaImportMsg').textContent = `Imported ${added}${skipped ? ', skipped '+skipped+' already in ledger' : ''}.`;
+  return added;
+}
+document.getElementById('btnImportTampa').onclick = ()=> importTampaLaptops(false);
+
+let nextpAssets = [];
+let activeNextPId = null;
+let pendingNextPAction = null;
+
+async function loadNextPAssets(){
+  try{
+    const res = await window.storage.get('nextpAssets', true);
+    nextpAssets = res ? JSON.parse(res.value) : [];
+  }catch(e){
+    nextpAssets = [];
+  }
+  await migrateNextPFromMainLedger();
+  await fixStuckDecommissionedNP();
+  await fixStuckProvidedInInventory();
+  renderNextP();
+}
+
+async function saveNextPAssets(){
+  try{
+    await window.storage.set('nextpAssets', JSON.stringify(nextpAssets), true);
+  }catch(e){
+    console.error('Save failed', e);
+  }
+}
+
+// One-time cleanup: any laptop in Laptop Inventory that's already Provided (assigned)
+// belongs in Active Laptops (NP) under the current rule — assigning a laptop always
+// moves it there. Catch any laptops assigned before that rule was made automatic.
+async function fixStuckProvidedInInventory(){
+  const stuck = assets.filter(a => a.status === 'provided');
+  if(stuck.length === 0) return;
+  for(const a of stuck){
+    assets = assets.filter(x=>x.id !== a.id);
+    addHistory(a, 'Moved to Active Laptops (NP)', `Data cleanup — assigned laptops now always move to Active Laptops (NP); ${a.assigned || 'this laptop'} was stuck in Laptop Inventory`);
+    a.location = a.location || 'GroundGame Health – Main (Next Perimeter)';
+    nextpAssets.push(a);
+  }
+  await saveAssets();
+  await saveNextPAssets();
+  render();
+}
+
+// One-time cleanup: earlier versions of this ledger could leave a laptop sitting in
+// Active Laptops (NP) with status "Decommissioned" instead of transferring it to
+// Laptop Inventory as Available. Decommissioned should never persist in this list —
+// catch and fix any leftover cases from before that transfer logic existed.
+async function fixStuckDecommissionedNP(){
+  const stuck = nextpAssets.filter(a => a.status === 'decommissioned');
+  if(stuck.length === 0) return;
+  for(const a of stuck){
+    await moveNextPToSerializedAssets(a, 'Data cleanup — was stuck as Decommissioned in Active Laptops (NP), moved to Laptop Inventory and marked Available');
+  }
+}
+
+// One-time cleanup: if Next Perimeter laptops were previously imported into the
+// main serialized ledger (before this was split out), move them over here.
+async function migrateNextPFromMainLedger(){
+  const stray = assets.filter(a => (a.location||'').includes('Next Perimeter'));
+  if(stray.length === 0) return;
+  const existingSerials = new Set(nextpAssets.map(a=>a.serial).filter(Boolean));
+  let moved = 0;
+  stray.forEach(a=>{
+    if(a.serial && existingSerials.has(a.serial)) return;
+    nextpAssets.push(a);
+    if(a.serial) existingSerials.add(a.serial);
+    moved++;
+  });
+  if(moved > 0){
+    assets = assets.filter(a => !(a.location||'').includes('Next Perimeter'));
+    await saveAssets();
+    await saveNextPAssets();
+    render();
+  }
+}
+
+function renderNextP(){
+  renderNextPStats();
+  renderNextPCategoryFilter();
+  renderNextPTable();
+  populateEmployeeDatalist();
+}
+
+function renderNextPStats(){
+  const counts = {available:0,provided:0,retained:0,damaged:0,decommissioned:0,nonfunctional:0};
+  nextpAssets.forEach(a=>{ if(counts[a.status]!==undefined) counts[a.status]++; });
+  const el = document.getElementById('nextpStats');
+  el.innerHTML = `
+    <div class="stat" style="--dot:var(--ink)"><span class="n">${nextpAssets.length}</span><span class="l">Total equipment</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.available}"><span class="n">${counts.available}</span><span class="l">Active (unassigned)</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.provided}"><span class="n">${counts.provided}</span><span class="l">Active (assigned)</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.retained}"><span class="n">${counts.retained}</span><span class="l">Retained</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.damaged}"><span class="n">${counts.damaged}</span><span class="l">Damaged</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.decommissioned}"><span class="n">${counts.decommissioned}</span><span class="l">Decommissioned</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.nonfunctional}"><span class="n">${counts.nonfunctional}</span><span class="l">Non-functional</span></div>
+  `;
+}
+
+function renderNextPCategoryFilter(){
+  const sel = document.getElementById('nextpFilterCategory');
+  const current = sel.value;
+  const cats = [...new Set(nextpAssets.map(a=>a.category).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">All categories</option>' + cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+  sel.value = current;
+}
+
+function renderNextPTable(){
+  const search = document.getElementById('nextpSearch').value.toLowerCase();
+  const fStatus = document.getElementById('nextpFilterStatus').value;
+  const fCategory = document.getElementById('nextpFilterCategory').value;
+
+  let list = nextpAssets.filter(a=>{
+    if(fStatus && a.status !== fStatus) return false;
+    if(fCategory && a.category !== fCategory) return false;
+    if(search){
+      const hay = [a.name,a.id,a.serial,a.assigned,a.location].join(' ').toLowerCase();
+      if(!hay.includes(search)) return false;
+    }
+    return true;
+  }).sort((a,b)=> (b.updated||'').localeCompare(a.updated||''));
+
+  const tbody = document.getElementById('nextpTbody');
+  const emptyState = document.getElementById('nextpEmptyState');
+
+  if(list.length===0){
+    tbody.innerHTML='';
+    emptyState.style.display='block';
+    return;
+  }
+  emptyState.style.display='none';
+
+  tbody.innerHTML = list.map(a=>`
+    <tr onclick="openNextPDetail('${a.id}')">
+      <td>
+        <div class="asset-name">${escapeHtml(a.name)}</div>
+        <div class="asset-id">${a.id}${a.serial ? ' · <span class=\"asset-serial\">'+escapeHtml(a.serial)+'</span>' : ''}</div>
+      </td>
+      <td>${escapeHtml(a.category||'—')}</td>
+      <td><span class="tag ${a.status}">${NP_STATUS_LABEL[a.status]}</span></td>
+      <td>${escapeHtml(a.assigned||'—')}</td>
+      <td>${escapeHtml(a.location||'—')}</td>
+      <td>${a.updated ? fmtDate(a.updated) : '—'}</td>
+    </tr>
+  `).join('');
+}
+
+async function importNextPerimeterLaptops(silent){
+  const existingSerials = new Set(nextpAssets.map(a=>a.serial).filter(Boolean));
+  let added = 0, skipped = 0;
+  NEXTP_LAPTOPS.forEach(row=>{
+    const [assetTag, user, serial, model, assetType, site] = row;
+    if(serial && existingSerials.has(serial)){ skipped++; return; }
+    const category = deriveCategory(model);
+    const hasUser = user && user.trim().length > 0;
+    const location = site === 'Main'
+      ? 'GroundGame Health – Main (Next Perimeter)'
+      : `GroundGame Health – ${site} (Next Perimeter)`;
+    const asset = {
+      id: uid(),
+      name: category + ' — ' + (hasUser ? user : 'Unassigned'),
+      category,
+      serial,
+      status: hasUser ? 'provided' : 'available',
+      assigned: hasUser ? user : '',
+      location,
+      history: [],
+      updated: today()
+    };
+    let detail = `Bulk import — Next Perimeter support, model ${model}`;
+    if(assetTag !== serial) detail += ` — Asset Tag: ${assetTag}`;
+    addHistory(asset, hasUser ? 'Marked active' : 'Added to stock', detail);
+    nextpAssets.push(asset);
+    if(serial) existingSerials.add(serial);
+    added++;
+  });
+  await saveNextPAssets();
+  renderNextP();
+  if(!silent) document.getElementById('nextpImportMsg').textContent = `Imported ${added}${skipped ? ', skipped '+skipped+' already in ledger' : ''}.`;
+  return added;
+}
+document.getElementById('btnImportNextP').onclick = ()=> importNextPerimeterLaptops(false);
+
+/* ---- Add Next Perimeter asset ---- */
+document.getElementById('btnAddNextP').onclick = ()=> openOverlay('addNextPOverlay');
+
+document.getElementById('btnSaveNextP').onclick = async ()=>{
+  const name = document.getElementById('np_name').value.trim();
+  if(!name){ alert('Give the asset a name first.'); return; }
+  const status = document.getElementById('np_status').value;
+  const asset = {
+    id: uid(),
+    name,
+    category: document.getElementById('np_category').value.trim(),
+    serial: document.getElementById('np_serial').value.trim(),
+    status,
+    assigned: status==='provided' ? document.getElementById('np_assigned').value.trim() : '',
+    location: document.getElementById('np_location').value.trim(),
+    history: [],
+    updated: today()
+  };
+  const note = document.getElementById('np_notes').value.trim();
+  addHistory(asset, 'Added to ledger', note);
+  nextpAssets.push(asset);
+  await saveNextPAssets();
+  renderNextP();
+  closeOverlay('addNextPOverlay');
+  ['np_name','np_category','np_serial','np_assigned','np_location','np_notes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('np_status').value='available';
+};
+
+/* ---- Next Perimeter detail / lifecycle actions ---- */
+function openNextPDetail(id){
+  activeNextPId = id;
+  const a = nextpAssets.find(x=>x.id===id);
+  if(!a) return;
+  document.getElementById('np_d_id').textContent = a.id;
+  document.getElementById('np_d_name').textContent = a.name;
+  const statusEl = document.getElementById('np_d_status');
+  statusEl.className = 'tag ' + a.status;
+  statusEl.textContent = NP_STATUS_LABEL[a.status];
+  document.getElementById('np_d_category').textContent = a.category || '—';
+  document.getElementById('np_d_serial').textContent = a.serial || '—';
+  document.getElementById('np_d_assigned').textContent = a.assigned || '—';
+  document.getElementById('np_d_location').textContent = a.location || '—';
+
+  renderNextPActionRow(a);
+  document.getElementById('np_subFormZone').innerHTML = '';
+  renderNextPTimeline(a);
+  document.getElementById('btnDeleteNextPAsset').onclick = deleteNextPAsset;
+  openOverlay('nextpDetailOverlay');
+}
+
+async function deleteNextPAsset(){
+  const a = nextpAssets.find(x=>x.id===activeNextPId);
+  if(!a) return;
+  const ok = confirm(`Permanently delete "${a.name}" (${a.serial || 'no serial'})?\n\nThis removes the record and its full history for good — use this only for duplicates or entry mistakes. This cannot be undone.`);
+  if(!ok) return;
+  nextpAssets = nextpAssets.filter(x=>x.id !== a.id);
+  await saveNextPAssets();
+  closeOverlay('nextpDetailOverlay');
+  renderNextP();
+}
+
+function renderNextPActionRow(a){
+  const row = document.getElementById('np_actionRow');
+  const buttons = [];
+  if(a.status==='available'){
+    buttons.push({label:'Mark active', cls:'btn-accent', action:'provide'});
+    buttons.push({label:'Retain', cls:'btn-ghost', action:'retain'});
+    buttons.push({label:'Mark damaged', cls:'btn-warn', action:'damage'});
+  } else if(a.status==='provided'){
+    buttons.push({label:'Collect', cls:'btn-ghost', action:'collect'});
+    buttons.push({label:'Transfer', cls:'btn-accent', action:'transfer'});
+    buttons.push({label:'Swap', cls:'btn-warn', action:'swap'});
+    buttons.push({label:'Mark damaged', cls:'btn-warn', action:'damage'});
+    buttons.push({label:'Decommission (employee left)', cls:'btn-decom', action:'decommission'});
+  } else if(a.status==='retained'){
+    buttons.push({label:'Mark active', cls:'btn-accent', action:'provide'});
+    buttons.push({label:'Mark damaged', cls:'btn-warn', action:'damage'});
+  } else if(a.status==='damaged'){
+    buttons.push({label:'Mark repaired', cls:'btn-accent', action:'repair'});
+    buttons.push({label:'Mark non-functional', cls:'btn-nonfunc', action:'nonfunctional'});
+  } else if(a.status==='decommissioned'){
+    buttons.push({label:'Mark active', cls:'btn-accent', action:'provide'});
+    buttons.push({label:'Retain', cls:'btn-ghost', action:'retain'});
+    buttons.push({label:'Mark damaged', cls:'btn-warn', action:'damage'});
+  } else if(a.status==='nonfunctional'){
+    // final state — beyond repair, no actions
+  }
+  row.innerHTML = buttons.map(b=>`<button class="btn btn-sm ${b.cls}" data-action="${b.action}">${b.label}</button>`).join('') ||
+    '<span style="font-size:12.5px;color:var(--ink-faint);">Non-functional — retired for good, no further actions.</span>';
+  row.querySelectorAll('button[data-action]').forEach(btn=>{
+    btn.onclick = ()=> showNextPSubForm(btn.dataset.action);
+  });
+}
+
+function showNextPSubForm(action){
+  pendingNextPAction = action;
+  const zone = document.getElementById('np_subFormZone');
+
+  if(action === 'swap'){
+    const options = nextpAssets.filter(a=> (a.status==='available' || a.status==='decommissioned') && a.id!==activeNextPId);
+    if(options.length===0){
+      zone.innerHTML = `<div class="sub-form"><div style="font-size:12.5px;color:var(--warn);">No available laptops in Active Laptops (NP) to swap in right now.</div><div class="modal-actions"><button class="btn btn-ghost btn-sm" id="np_sf_cancel">Close</button></div></div>`;
+      document.getElementById('np_sf_cancel').onclick = ()=>{ zone.innerHTML=''; pendingNextPAction=null; };
+      return;
+    }
+    zone.innerHTML = `
+      <div class="sub-form">
+        <div class="field"><label>Reason for swap (required)</label><textarea id="np_sf_reason" placeholder="e.g. Screen cracked, won't power on..."></textarea></div>
+        <div class="field"><label>Replacement laptop (Available stock)</label>
+          <select id="np_sf_replacement">
+            ${options.map(a=>`<option value="${a.id}">${escapeHtml(a.name)} — ${escapeHtml(a.serial||'no serial')}</option>`).join('')}
+          </select>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost btn-sm" id="np_sf_cancel">Cancel</button>
+          <button class="btn btn-primary btn-sm" id="np_sf_confirm">Confirm swap</button>
+        </div>
+      </div>
+    `;
+    document.getElementById('np_sf_cancel').onclick = ()=>{ zone.innerHTML=''; pendingNextPAction=null; };
+    document.getElementById('np_sf_confirm').onclick = confirmNextPSwap;
+    return;
+  }
+
+  const needsPerson = action==='provide' || action==='transfer';
+  zone.innerHTML = `
+    <div class="sub-form">
+      ${needsPerson ? `<div class="field"><label>${action==='transfer'?'New assignee':'Assign to'}</label><input type="text" id="np_sf_person" placeholder="Person name" list="employeeNamesList"></div>` : ''}
+      <div class="field"><label>Notes</label><textarea id="np_sf_notes" placeholder="Optional detail for the log"></textarea></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost btn-sm" id="np_sf_cancel">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="np_sf_confirm">Confirm</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('np_sf_cancel').onclick = ()=>{ zone.innerHTML=''; pendingNextPAction=null; };
+  document.getElementById('np_sf_confirm').onclick = confirmNextPAction;
+}
+
+async function confirmNextPAction(){
+  const a = nextpAssets.find(x=>x.id===activeNextPId);
+  if(!a) return;
+  const notesEl = document.getElementById('np_sf_notes');
+  const notes = notesEl ? notesEl.value.trim() : '';
+  const personEl = document.getElementById('np_sf_person');
+  const person = personEl ? personEl.value.trim() : '';
+
+  switch(pendingNextPAction){
+    case 'provide':
+      a.status='provided'; a.assigned = person || a.assigned || 'Unassigned';
+      addHistory(a,'Marked active', person ? `Assigned to ${person}` : notes);
+      break;
+    case 'collect':
+      addHistory(a,'Collected', `Returned from ${a.assigned || 'assignee'}${notes ? ' — '+notes : ''}`);
+      a.status='available'; a.assigned='';
+      break;
+    case 'transfer':
+      const prev = a.assigned || 'previous holder';
+      a.assigned = person || a.assigned;
+      addHistory(a,'Transferred', `From ${prev} to ${a.assigned}${notes ? ' — '+notes : ''}`);
+      break;
+    case 'retain':
+      a.status='retained';
+      addHistory(a,'Retained', notes || 'Moved to storage');
+      break;
+    case 'damage':
+      a.status='damaged';
+      addHistory(a,'Marked damaged', notes || 'No detail provided');
+      break;
+    case 'repair':
+      a.status='available';
+      addHistory(a,'Marked repaired', notes || 'Returned to available pool');
+      break;
+    case 'decommission':
+      a.status='decommissioned'; a.assigned='';
+      addHistory(a,'Decommissioned', notes || 'Employee separation — laptop refreshed and returned to pool, ready to reissue');
+      break;
+    case 'nonfunctional':
+      a.status='nonfunctional'; a.assigned='';
+      addHistory(a,'Marked non-functional', notes || 'Beyond repair — retired for good');
+      break;
+  }
+
+  if(pendingNextPAction === 'decommission'){
+    await moveNextPToSerializedAssets(a, 'Decommissioned — moved to Laptop Inventory, ready to reissue');
+    document.getElementById('np_subFormZone').innerHTML='';
+    pendingNextPAction=null;
+    closeOverlay('nextpDetailOverlay');
+    alert(`${a.name} decommissioned and moved to Laptop Inventory.`);
+    return;
+  }
+
+  await saveNextPAssets();
+  document.getElementById('np_subFormZone').innerHTML='';
+  pendingNextPAction=null;
+  openNextPDetail(a.id);
+  renderNextP();
+}
+
+async function moveNextPToSerializedAssets(a, noteDetail){
+  nextpAssets = nextpAssets.filter(x=>x.id !== a.id);
+  a.status = 'available';
+  a.assigned = '';
+  addHistory(a, 'Moved to Laptop Inventory', noteDetail || 'Decommissioned in Active Laptops (NP) — now marked Available in Laptop Inventory, ready to reissue');
+  assets.push(a);
+  await saveNextPAssets();
+  await saveAssets();
+  render();
+  renderNextP();
+}
+
+async function confirmNextPSwap(){
+  const oldAsset = nextpAssets.find(x=>x.id===activeNextPId);
+  if(!oldAsset) return;
+  const reason = document.getElementById('np_sf_reason').value.trim();
+  if(!reason){ alert('Please enter a reason for the swap — this is required.'); return; }
+  const replacementId = document.getElementById('np_sf_replacement').value;
+  const newAsset = nextpAssets.find(x=>x.id===replacementId);
+  if(!newAsset) return;
+
+  const person = oldAsset.assigned || 'the employee';
+
+  addHistory(oldAsset, 'Swapped out', `Reason: ${reason} — replaced by ${newAsset.name} (${newAsset.serial||'no serial'})`);
+  oldAsset.status = 'damaged';
+
+  addHistory(newAsset, 'Swapped in', `Reason: ${reason} — replacing ${oldAsset.name} (${oldAsset.serial||'no serial'}), assigned to ${person}`);
+  newAsset.status = 'provided';
+  newAsset.assigned = person;
+
+  await saveNextPAssets();
+  document.getElementById('np_subFormZone').innerHTML='';
+  pendingNextPAction=null;
+  openNextPDetail(oldAsset.id);
+  renderNextP();
+}
+
+function renderNextPTimeline(a){
+  const el = document.getElementById('np_timeline');
+  const hist = a.history || [];
+  if(hist.length===0){ el.innerHTML = '<div style="color:var(--ink-faint);font-size:12.5px;">No activity logged yet.</div>'; return; }
+  el.innerHTML = hist.map(h=>`
+    <div class="tl-item">
+      <div class="tl-dot"></div>
+      <div class="tl-body">
+        <b>${escapeHtml(h.action)}</b>
+        <div class="tl-meta">${fmtDate(h.date)}</div>
+        ${h.detail ? `<div class="tl-note">${escapeHtml(h.detail)}</div>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+document.getElementById('nextpSearch').addEventListener('input', renderNextPTable);
+document.getElementById('nextpFilterStatus').addEventListener('change', renderNextPTable);
+document.getElementById('nextpFilterCategory').addEventListener('change', renderNextPTable);
+
+document.getElementById('btnMarkTampaAvailable').onclick = async ()=>{
+  const targets = assets.filter(a=> a.location==='Tampa Office' && a.status==='provided');
+  if(targets.length===0){
+    document.getElementById('tampaUpdateMsg').textContent = 'No Provided assets found for Tampa Office — nothing to update.';
+    return;
+  }
+  targets.forEach(a=>{
+    const prevAssignee = a.assigned || 'unassigned';
+    addHistory(a, 'Marked available', `Moved from Provided (was with ${prevAssignee}) to Available — in-stock inventory update`);
+    a.status = 'available';
+    a.assigned = '';
+  });
+  await saveAssets();
+  render();
+  document.getElementById('tampaUpdateMsg').textContent = `Updated ${targets.length} laptop(s) to Available.`;
+};
+
+document.getElementById('btnBulkImport').onclick = async ()=>{
+  const raw = document.getElementById('f_bulk').value.trim();
+  if(!raw){ alert('Paste some rows first.'); return; }
+  const location = document.getElementById('f_bulk_location').value.trim();
+  const status = document.getElementById('f_bulk_status').value;
+  const lines = raw.split('\n').map(l=>l.trim()).filter(Boolean);
+  const existingSerials = new Set(assets.map(a=>a.serial).filter(Boolean));
+  let added = 0, skipped = 0;
+
+  lines.forEach(line=>{
+    if(/assigned\s*to/i.test(line) && /category/i.test(line)) return; // skip header row
+    const cols = line.split('\t').map(c=>c.trim());
+    if(cols.length < 3) return;
+    const [assigned, serial, category, notes] = cols;
+    if(serial && existingSerials.has(serial)){ skipped++; return; }
+    const asset = {
+      id: uid(),
+      name: (category||'Item') + ' — ' + (assigned||'Unassigned'),
+      category: category||'',
+      serial: serial||'',
+      status,
+      assigned: status==='provided' ? (assigned||'') : '',
+      location,
+      history: [],
+      updated: today()
+    };
+    let detail = 'Bulk import' + (location ? ` — ${location}` : '');
+    if(notes) detail += ` — ${notes}`;
+    addHistory(asset, STATUS_LABEL[status], detail);
+    assets.push(asset);
+    if(serial) existingSerials.add(serial);
+    added++;
+  });
+
+  await saveAssets();
+  render();
+  closeOverlay('importOverlay');
+  document.getElementById('f_bulk').value = '';
+  alert(`Imported ${added} asset(s)${skipped ? ', skipped '+skipped+' duplicate serial(s)' : ''}.`);
+};
+
+/* ---- Detail / lifecycle actions ---- */
+function openDetail(id){
+  activeId = id;
+  const a = assets.find(x=>x.id===id);
+  if(!a) return;
+  document.getElementById('d_id').textContent = a.id;
+  document.getElementById('d_name').textContent = a.name;
+  const statusEl = document.getElementById('d_status');
+  statusEl.className = 'tag ' + a.status;
+  statusEl.textContent = STATUS_LABEL[a.status];
+  document.getElementById('d_category').textContent = a.category || '—';
+  document.getElementById('d_serial').textContent = a.serial || '—';
+  document.getElementById('d_assigned').textContent = a.assigned || '—';
+  document.getElementById('d_location').textContent = a.location || '—';
+
+  renderActionRow(a);
+  document.getElementById('subFormZone').innerHTML = '';
+  renderTimeline(a);
+  openOverlay('detailOverlay');
+}
+
+function renderActionRow(a){
+  const row = document.getElementById('actionRow');
+  const buttons = [];
+  if(a.status==='available'){
+    buttons.push({label:'Provide', cls:'btn-accent', action:'provide'});
+    buttons.push({label:'Retain', cls:'btn-ghost', action:'retain'});
+    buttons.push({label:'Mark damaged', cls:'btn-warn', action:'damage'});
+  } else if(a.status==='provided'){
+    buttons.push({label:'Collect', cls:'btn-ghost', action:'collect'});
+    buttons.push({label:'Transfer', cls:'btn-accent', action:'transfer'});
+    buttons.push({label:'Swap', cls:'btn-warn', action:'swap'});
+    buttons.push({label:'Mark damaged', cls:'btn-warn', action:'damage'});
+    buttons.push({label:'Decommission (employee left)', cls:'btn-decom', action:'decommission'});
+  } else if(a.status==='retained'){
+    buttons.push({label:'Provide', cls:'btn-accent', action:'provide'});
+    buttons.push({label:'Mark damaged', cls:'btn-warn', action:'damage'});
+  } else if(a.status==='damaged'){
+    buttons.push({label:'Mark repaired', cls:'btn-accent', action:'repair'});
+    buttons.push({label:'Mark non-functional', cls:'btn-nonfunc', action:'nonfunctional'});
+  } else if(a.status==='decommissioned'){
+    buttons.push({label:'Provide', cls:'btn-accent', action:'provide'});
+    buttons.push({label:'Retain', cls:'btn-ghost', action:'retain'});
+    buttons.push({label:'Mark damaged', cls:'btn-warn', action:'damage'});
+  } else if(a.status==='nonfunctional'){
+    // final state — beyond repair, no actions
+  }
+  row.innerHTML = buttons.map(b=>`<button class="btn btn-sm ${b.cls}" data-action="${b.action}">${b.label}</button>`).join('') ||
+    '<span style="font-size:12.5px;color:var(--ink-faint);">Non-functional — retired for good, no further actions.</span>';
+
+  row.querySelectorAll('button[data-action]').forEach(btn=>{
+    btn.onclick = ()=> showSubForm(btn.dataset.action);
+  });
+}
+
+function showSubForm(action){
+  pendingAction = action;
+  const zone = document.getElementById('subFormZone');
+
+  if(action === 'swap'){
+    const options = assets.filter(a=> (a.status==='available' || a.status==='decommissioned') && a.id!==activeId);
+    if(options.length===0){
+      zone.innerHTML = `<div class="sub-form"><div style="font-size:12.5px;color:var(--warn);">No available laptops in Laptop Inventory to swap in right now.</div><div class="modal-actions"><button class="btn btn-ghost btn-sm" id="sf_cancel">Close</button></div></div>`;
+      document.getElementById('sf_cancel').onclick = ()=>{ zone.innerHTML=''; pendingAction=null; };
+      return;
+    }
+    zone.innerHTML = `
+      <div class="sub-form">
+        <div class="field"><label>Reason for swap (required)</label><textarea id="sf_reason" placeholder="e.g. Screen cracked, won't power on..."></textarea></div>
+        <div class="field"><label>Replacement laptop (Available stock)</label>
+          <select id="sf_replacement">
+            ${options.map(a=>`<option value="${a.id}">${escapeHtml(a.name)} — ${escapeHtml(a.serial||'no serial')}</option>`).join('')}
+          </select>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost btn-sm" id="sf_cancel">Cancel</button>
+          <button class="btn btn-primary btn-sm" id="sf_confirm">Confirm swap</button>
+        </div>
+      </div>
+    `;
+    document.getElementById('sf_cancel').onclick = ()=>{ zone.innerHTML=''; pendingAction=null; };
+    document.getElementById('sf_confirm').onclick = confirmSwap;
+    return;
+  }
+
+  const needsPerson = action==='provide' || action==='transfer';
+  zone.innerHTML = `
+    <div class="sub-form">
+      ${needsPerson ? `<div class="field"><label>${action==='transfer'?'New assignee':'Assign to'}</label><input type="text" id="sf_person" placeholder="Person name" list="employeeNamesList"></div>` : ''}
+      <div class="field"><label>Notes</label><textarea id="sf_notes" placeholder="Optional detail for the log"></textarea></div>
+      ${action==='provide' ? `<div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:8px;">Assigning this laptop will automatically move it to Active Laptops (NP).</div>` : ''}
+      <div class="modal-actions">
+        <button class="btn btn-ghost btn-sm" id="sf_cancel">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="sf_confirm">Confirm</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('sf_cancel').onclick = ()=>{ zone.innerHTML=''; pendingAction=null; };
+  document.getElementById('sf_confirm').onclick = confirmAction;
+}
+
+async function confirmAction(){
+  const a = assets.find(x=>x.id===activeId);
+  if(!a) return;
+  const notesEl = document.getElementById('sf_notes');
+  const notes = notesEl ? notesEl.value.trim() : '';
+  const personEl = document.getElementById('sf_person');
+  const person = personEl ? personEl.value.trim() : '';
+
+  switch(pendingAction){
+    case 'provide':
+      a.status='provided'; a.assigned = person || a.assigned || 'Unassigned';
+      addHistory(a,'Provided', person ? `Assigned to ${person}` : notes);
+      break;
+    case 'collect':
+      addHistory(a,'Collected', `Returned from ${a.assigned || 'assignee'}${notes ? ' — '+notes : ''}`);
+      a.status='available'; a.assigned='';
+      break;
+    case 'transfer':
+      const prev = a.assigned || 'previous holder';
+      a.assigned = person || a.assigned;
+      addHistory(a,'Transferred', `From ${prev} to ${a.assigned}${notes ? ' — '+notes : ''}`);
+      break;
+    case 'retain':
+      a.status='retained';
+      addHistory(a,'Retained', notes || 'Moved to storage');
+      break;
+    case 'damage':
+      a.status='damaged';
+      addHistory(a,'Marked damaged', notes || 'No detail provided');
+      break;
+    case 'repair':
+      a.status='available';
+      addHistory(a,'Marked repaired', notes || 'Returned to available pool');
+      break;
+    case 'decommission':
+      a.status='decommissioned'; a.assigned='';
+      addHistory(a,'Decommissioned', notes || 'Employee separation — laptop refreshed and returned to pool, ready to reissue');
+      break;
+    case 'nonfunctional':
+      a.status='nonfunctional'; a.assigned='';
+      addHistory(a,'Marked non-functional', notes || 'Beyond repair — retired for good');
+      break;
+  }
+
+  if(pendingAction === 'provide'){
+    assets = assets.filter(x=>x.id !== a.id);
+    addHistory(a, 'Moved to Active Laptops (NP)', `Reissued to ${a.assigned} — now under Next Perimeter support`);
+    a.location = a.location || 'GroundGame Health – Main (Next Perimeter)';
+    nextpAssets.push(a);
+    await saveAssets();
+    await saveNextPAssets();
+    document.getElementById('subFormZone').innerHTML='';
+    pendingAction=null;
+    closeOverlay('detailOverlay');
+    render();
+    renderNextP();
+    alert(`${a.name} moved to Active Laptops (NP), assigned to ${a.assigned}.`);
+    return;
+  }
+
+  await saveAssets();
+  document.getElementById('subFormZone').innerHTML='';
+  pendingAction=null;
+  openDetail(a.id);
+  render();
+}
+
+async function confirmSwap(){
+  const oldAsset = assets.find(x=>x.id===activeId);
+  if(!oldAsset) return;
+  const reason = document.getElementById('sf_reason').value.trim();
+  if(!reason){ alert('Please enter a reason for the swap — this is required.'); return; }
+  const replacementId = document.getElementById('sf_replacement').value;
+  const newAsset = assets.find(x=>x.id===replacementId);
+  if(!newAsset) return;
+
+  const person = oldAsset.assigned || 'the employee';
+
+  addHistory(oldAsset, 'Swapped out', `Reason: ${reason} — replaced by ${newAsset.name} (${newAsset.serial||'no serial'})`);
+  oldAsset.status = 'damaged';
+
+  addHistory(newAsset, 'Swapped in', `Reason: ${reason} — replacing ${oldAsset.name} (${oldAsset.serial||'no serial'}), assigned to ${person}`);
+  newAsset.status = 'provided';
+  newAsset.assigned = person;
+
+  await saveAssets();
+  document.getElementById('subFormZone').innerHTML='';
+  pendingAction=null;
+  openDetail(oldAsset.id);
+  render();
+}
+
+function renderTimeline(a){
+  const el = document.getElementById('timeline');
+  const hist = a.history || [];
+  if(hist.length===0){ el.innerHTML = '<div style="color:var(--ink-faint);font-size:12.5px;">No activity logged yet.</div>'; return; }
+  el.innerHTML = hist.map(h=>`
+    <div class="tl-item">
+      <div class="tl-dot"></div>
+      <div class="tl-body">
+        <b>${escapeHtml(h.action)}</b>
+        <div class="tl-meta">${fmtDate(h.date)}</div>
+        ${h.detail ? `<div class="tl-note">${escapeHtml(h.detail)}</div>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+/* ---- overlay helpers ---- */
+function openOverlay(id){ document.getElementById(id).classList.add('show'); }
+function closeOverlay(id){ document.getElementById(id).classList.remove('show'); }
+document.querySelectorAll('[data-close]').forEach(el=>{
+  el.onclick = ()=> closeOverlay(el.dataset.close);
+});
+document.querySelectorAll('.overlay').forEach(ov=>{
+  ov.addEventListener('click', e=>{ if(e.target===ov) closeOverlay(ov.id); });
+});
+
+document.getElementById('search').addEventListener('input', renderTable);
+document.getElementById('filterStatus').addEventListener('change', renderTable);
+document.getElementById('filterCategory').addEventListener('change', renderTable);
+
+/* ---- Backup: export/import all data as a JSON file ---- */
+document.getElementById('btnExportData').onclick = ()=>{
+  const backup = {
+    exportedAt: new Date().toISOString(),
+    assets, nextpAssets, monitorAssets, bulkItems
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `equipment-ledger-backup-${today()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+document.getElementById('btnImportDataTrigger').onclick = ()=>{
+  document.getElementById('importDataFile').click();
+};
+
+document.getElementById('importDataFile').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  try{
+    const text = await file.text();
+    const data = JSON.parse(text);
+    const summary = `This backup has:\n- ${(data.assets||[]).length} Laptop Inventory\n- ${(data.nextpAssets||[]).length} Active Laptops (NP)\n- ${(data.monitorAssets||[]).length} Monitors\n- ${(data.bulkItems||[]).length} Bulk Stock item types\n\nImporting will REPLACE everything currently in this ledger. Continue?`;
+    if(!confirm(summary)){ e.target.value=''; return; }
+    assets = data.assets || [];
+    nextpAssets = data.nextpAssets || [];
+    monitorAssets = data.monitorAssets || [];
+    bulkItems = data.bulkItems || [];
+    await saveAssets();
+    await saveNextPAssets();
+    await saveMonitorAssets();
+    await saveBulkItems();
+    render();
+    renderNextP();
+    renderMonitors();
+    renderBulk();
+    alert('Backup restored.');
+  }catch(err){
+    alert("Couldn't read that file — make sure it's a backup exported from this ledger's Export backup button.");
+  }
+  e.target.value = '';
+});
+
+(async function init(){
+  await loadAssets();
+  await loadNextPAssets();
+  await loadMonitorAssets();
+  await loadBulkItems();
+  await loadOnboardingCases();
+
+  // First-run convenience: when this file is opened standalone (not inside Claude.ai)
+  // and there's genuinely no data yet, auto-load the known baseline datasets so the
+  // file is useful immediately instead of showing empty tables until someone finds
+  // and clicks each import button manually.
+  if(window.__usingLocalStorageFallback && assets.length===0 && nextpAssets.length===0 && monitorAssets.length===0){
+    await importTampaLaptops(true);
+    await importNextPerimeterLaptops(true);
+    await importTampaMonitors(true);
+  }
+
+  renderOverview();
+})();
+</script>
+</body>
+</html>
