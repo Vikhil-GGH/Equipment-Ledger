@@ -89,19 +89,65 @@
   }
   .main-content{flex:1;min-width:0;padding:28px 40px 80px;}
 
+  .mobile-topbar{display:none;}
+  .mobile-backdrop{display:none;}
+
   @media (max-width: 760px){
+    .mobile-topbar{
+      display:flex;align-items:center;gap:12px;
+      background:var(--sidebar-bg);color:var(--sidebar-text);
+      padding:14px 16px;position:sticky;top:0;z-index:40;
+    }
+    .mobile-topbar .brand-mark{width:26px;height:26px;}
+    .mobile-topbar .brand-name{font-size:14px;}
+    #btnMobileMenu{
+      background:none;border:none;color:var(--sidebar-text);
+      font-size:20px;line-height:1;padding:4px 6px;cursor:pointer;
+    }
     .app-shell{flex-direction:column;}
-    .sidebar{width:100%;flex-direction:row;flex-wrap:wrap;padding:14px 12px;gap:12px;}
-    .sidebar-brand{border-bottom:none;padding:0;flex:1 1 100%;}
-    .nav-section{flex-direction:row;flex-wrap:wrap;gap:6px;}
-    .nav-label{display:none;}
-    .nav-item{width:auto;border-left:none;border-bottom:2px solid transparent;border-radius:6px 6px 0 0;}
-    .nav-item.active{border-left:none;border-bottom-color:var(--accent);}
-    .main-content{padding:20px 16px 60px;}
+    .sidebar{
+      position:fixed;top:0;left:0;bottom:0;z-index:50;
+      width:78vw;max-width:290px;
+      transform:translateX(-100%);
+      transition:transform 0.22s ease;
+      box-shadow:2px 0 24px rgba(0,0,0,0.25);
+    }
+    .sidebar.open{transform:translateX(0);}
+    .mobile-backdrop.open{
+      display:block;position:fixed;inset:0;z-index:45;
+      background:rgba(0,0,0,0.4);
+    }
+    .main-content{padding:18px 16px 60px;}
     .stats{flex-direction:column;}
     .stat{min-width:0;}
     .toolbar{flex-direction:column;align-items:stretch;}
     .toolbar input, .toolbar select, .toolbar button{width:100%;}
+
+    /* TABLES BECOME CARDS ON MOBILE — no horizontal scrolling needed */
+    .table-card{overflow-x:visible;border:none;background:transparent;border-radius:0;}
+    table{min-width:0;width:100%;}
+    thead{display:none;}
+    tbody, tr, td{display:block;width:100%;}
+    tr{
+      background:var(--surface);
+      border:1px solid var(--line);
+      border-radius:10px;
+      padding:12px 14px;
+      margin-bottom:10px;
+    }
+    td{
+      border:none;
+      padding:5px 0;
+      display:flex;justify-content:space-between;align-items:center;gap:10px;
+    }
+    td::before{
+      content:attr(data-label);
+      font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;
+      color:var(--ink-faint);flex-shrink:0;
+    }
+    td:first-child{padding-top:0;}
+    td:first-child::before{display:none;}
+    td:first-child{display:block;padding-bottom:8px;margin-bottom:6px;border-bottom:1px solid var(--line);}
   }
   .breadcrumb{font-size:12px;color:var(--ink-faint);margin-bottom:8px;}
   .breadcrumb b{color:var(--ink-soft);font-weight:600;}
@@ -193,10 +239,6 @@
     border:1px solid var(--line);
     border-radius:var(--radius);
     overflow:hidden;
-  }
-  @media (max-width: 760px){
-    .table-card{overflow-x:auto;-webkit-overflow-scrolling:touch;}
-    table{min-width:660px;}
   }
   table{width:100%;border-collapse:collapse;}
   thead th{
@@ -353,8 +395,15 @@
 </head>
 <body>
 
+<div class="mobile-topbar">
+  <button id="btnMobileMenu" aria-label="Open menu">☰</button>
+  <div class="brand-mark"></div>
+  <div class="brand-name">Equipment Ledger</div>
+</div>
+<div class="mobile-backdrop" id="mobileBackdrop"></div>
+
 <div class="app-shell">
-  <aside class="sidebar">
+  <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
       <div class="brand-mark"></div>
       <div>
@@ -1256,14 +1305,14 @@ function renderBulkTable(){
 
   tbody.innerHTML = list.map(it=>`
     <tr onclick="openBulkDetail('${it.id}')">
-      <td><div class="asset-name">${escapeHtml(it.name)}</div><div class="asset-id">${it.id}</div></td>
-      <td>${escapeHtml(it.category||'—')}</td>
-      <td>${qtyCell(it.buckets.available)}</td>
-      <td>${qtyCell(it.buckets.provided)}</td>
-      <td>${qtyCell(it.buckets.retained)}</td>
-      <td>${qtyCell(it.buckets.damaged)}</td>
-      <td>${qtyCell(bulkTotal(it))}</td>
-      <td>${escapeHtml(it.location||'—')}</td>
+      <td data-label="Item"><div class="asset-name">${escapeHtml(it.name)}</div><div class="asset-id">${it.id}</div></td>
+      <td data-label="Category">${escapeHtml(it.category||'—')}</td>
+      <td data-label="Available">${qtyCell(it.buckets.available)}</td>
+      <td data-label="Provided">${qtyCell(it.buckets.provided)}</td>
+      <td data-label="Retained">${qtyCell(it.buckets.retained)}</td>
+      <td data-label="Damaged">${qtyCell(it.buckets.damaged)}</td>
+      <td data-label="Total">${qtyCell(bulkTotal(it))}</td>
+      <td data-label="Location">${escapeHtml(it.location||'—')}</td>
     </tr>
   `).join('');
 }
@@ -1584,7 +1633,20 @@ function showTab(which){
   document.getElementById('pageDesc').textContent = meta[which].desc;
   document.getElementById('crumbCurrent').textContent = meta[which].title;
   if(which === 'overview') renderOverview();
+  closeMobileDrawer();
 }
+
+function openMobileDrawer(){
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('mobileBackdrop').classList.add('open');
+}
+function closeMobileDrawer(){
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('mobileBackdrop').classList.remove('open');
+}
+document.getElementById('btnMobileMenu').onclick = openMobileDrawer;
+document.getElementById('mobileBackdrop').onclick = closeMobileDrawer;
+
 document.getElementById('tabOverview').onclick = ()=> showTab('overview');
 document.getElementById('tabScan').onclick = ()=> showTab('scan');
 document.getElementById('tabSerial').onclick = ()=> showTab('serial');
@@ -1868,15 +1930,15 @@ function renderMonitorTable(){
 
   tbody.innerHTML = list.map(a=>`
     <tr onclick="openMonitorDetail('${a.id}')">
-      <td>
+      <td data-label="Monitor">
         <div class="asset-name">${escapeHtml(a.name)}</div>
         <div class="asset-id">${a.id}${a.serial ? ' · <span class=\"asset-serial\">'+escapeHtml(a.serial)+'</span>' : ''}</div>
       </td>
-      <td>${escapeHtml(a.category||'—')}</td>
-      <td><span class="tag ${a.status}">${STATUS_LABEL[a.status]}</span></td>
-      <td>${escapeHtml(a.assigned||'—')}</td>
-      <td>${escapeHtml(a.location||'—')}</td>
-      <td>${a.updated ? fmtDate(a.updated) : '—'}</td>
+      <td data-label="Brand">${escapeHtml(a.category||'—')}</td>
+      <td data-label="Status"><span class="tag ${a.status}">${STATUS_LABEL[a.status]}</span></td>
+      <td data-label="Assigned to">${escapeHtml(a.assigned||'—')}</td>
+      <td data-label="Location">${escapeHtml(a.location||'—')}</td>
+      <td data-label="Updated">${a.updated ? fmtDate(a.updated) : '—'}</td>
     </tr>
   `).join('');
 }
@@ -2684,15 +2746,15 @@ function renderTable(){
 
   tbody.innerHTML = list.map(a=>`
     <tr onclick="openDetail('${a.id}')">
-      <td>
+      <td data-label="Asset">
         <div class="asset-name">${escapeHtml(a.name)}</div>
         <div class="asset-id">${a.id}${a.serial ? ' · <span class=\"asset-serial\">'+escapeHtml(a.serial)+'</span>' : ''}</div>
       </td>
-      <td>${escapeHtml(a.category||'—')}</td>
-      <td><span class="tag ${a.status}">${STATUS_LABEL[a.status]}</span></td>
-      <td>${escapeHtml(a.assigned||'—')}</td>
-      <td>${escapeHtml(a.location||'—')}</td>
-      <td>${a.updated ? fmtDate(a.updated) : '—'}</td>
+      <td data-label="Category">${escapeHtml(a.category||'—')}</td>
+      <td data-label="Status"><span class="tag ${a.status}">${STATUS_LABEL[a.status]}</span></td>
+      <td data-label="Assigned to">${escapeHtml(a.assigned||'—')}</td>
+      <td data-label="Location">${escapeHtml(a.location||'—')}</td>
+      <td data-label="Updated">${a.updated ? fmtDate(a.updated) : '—'}</td>
     </tr>
   `).join('');
 }
@@ -2896,15 +2958,15 @@ function renderNextPTable(){
 
   tbody.innerHTML = list.map(a=>`
     <tr onclick="openNextPDetail('${a.id}')">
-      <td>
+      <td data-label="Asset">
         <div class="asset-name">${escapeHtml(a.name)}</div>
         <div class="asset-id">${a.id}${a.serial ? ' · <span class=\"asset-serial\">'+escapeHtml(a.serial)+'</span>' : ''}</div>
       </td>
-      <td>${escapeHtml(a.category||'—')}</td>
-      <td><span class="tag ${a.status}">${NP_STATUS_LABEL[a.status]}</span></td>
-      <td>${escapeHtml(a.assigned||'—')}</td>
-      <td>${escapeHtml(a.location||'—')}</td>
-      <td>${a.updated ? fmtDate(a.updated) : '—'}</td>
+      <td data-label="Category">${escapeHtml(a.category||'—')}</td>
+      <td data-label="Status"><span class="tag ${a.status}">${NP_STATUS_LABEL[a.status]}</span></td>
+      <td data-label="Assigned to">${escapeHtml(a.assigned||'—')}</td>
+      <td data-label="Location">${escapeHtml(a.location||'—')}</td>
+      <td data-label="Updated">${a.updated ? fmtDate(a.updated) : '—'}</td>
     </tr>
   `).join('');
 }
@@ -3552,4 +3614,3 @@ document.getElementById('importDataFile').addEventListener('change', async (e)=>
 </script>
 </body>
 </html>
-<!-- rebuild trigger 1786116533 -->
