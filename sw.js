@@ -1,6 +1,8 @@
 // Minimal service worker: caches the app shell so it opens even with a flaky
 // or absent connection. Equipment data itself lives in localStorage, not here.
-const CACHE_NAME = 'equipment-ledger-v1';
+// Network-first everywhere for now (app is actively being updated) — cache is
+// purely an offline fallback, never preferred over a fresh copy when online.
+const CACHE_NAME = 'equipment-ledger-v2';
 const APP_SHELL = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (event) => {
@@ -20,14 +22,13 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Network-first for navigation so updates show up promptly; fall back to cache offline.
-  if (event.request.mode === 'navigate') {
-    event.respondWith(
-      fetch(event.request).catch(() => caches.match('./index.html'))
-    );
-    return;
-  }
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
+    fetch(event.request)
+      .then((response) => {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        return response;
+      })
+      .catch(() => caches.match(event.request).then((cached) => cached || caches.match('./index.html')))
   );
 });
