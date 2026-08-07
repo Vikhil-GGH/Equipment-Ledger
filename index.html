@@ -3548,7 +3548,7 @@ document.getElementById('filterCategory').addEventListener('change', renderTable
 document.getElementById('btnExportData').onclick = ()=>{
   const backup = {
     exportedAt: new Date().toISOString(),
-    assets, nextpAssets, monitorAssets, bulkItems
+    assets, nextpAssets, monitorAssets, bulkItems, onboardingCases
   };
   const blob = new Blob([JSON.stringify(backup, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
@@ -3571,16 +3571,18 @@ document.getElementById('importDataFile').addEventListener('change', async (e)=>
   try{
     const text = await file.text();
     const data = JSON.parse(text);
-    const summary = `This backup has:\n- ${(data.assets||[]).length} Laptop Inventory\n- ${(data.nextpAssets||[]).length} Active Laptops (NP)\n- ${(data.monitorAssets||[]).length} Monitors\n- ${(data.bulkItems||[]).length} Bulk Stock item types\n\nImporting will REPLACE everything currently in this ledger. Continue?`;
+    const summary = `This backup has:\n- ${(data.assets||[]).length} Laptop Inventory\n- ${(data.nextpAssets||[]).length} Active Laptops (NP)\n- ${(data.monitorAssets||[]).length} Monitors\n- ${(data.bulkItems||[]).length} Bulk Stock item types\n- ${(data.onboardingCases||[]).length} Onboarding case(s)\n\nImporting will REPLACE everything currently in this ledger. Continue?`;
     if(!confirm(summary)){ e.target.value=''; return; }
     assets = data.assets || [];
     nextpAssets = data.nextpAssets || [];
     monitorAssets = data.monitorAssets || [];
     bulkItems = data.bulkItems || [];
+    onboardingCases = data.onboardingCases || [];
     await saveAssets();
     await saveNextPAssets();
     await saveMonitorAssets();
     await saveBulkItems();
+    await saveOnboardingCases();
     render();
     renderNextP();
     renderMonitors();
