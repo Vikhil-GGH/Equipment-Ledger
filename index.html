@@ -531,6 +531,7 @@
         <option value="">All categories</option>
       </select>
       <button class="btn btn-ghost" id="btnImportNextP">Import Next Perimeter list (110)</button>
+      <button class="btn btn-accent" id="btnReconcileNP">Update from Aug 31 export (105)</button>
       <span id="nextpImportMsg" style="font-size:12px;color:var(--ink-soft);"></span>
       <button class="btn btn-primary" id="btnAddNextP">+ Add asset</button>
     </div>
@@ -1212,6 +1213,204 @@ function deriveCategory(model){
   if(/latitude|inspiron|dell/i.test(model)) return 'Dell Laptop';
   return 'Other';
 }
+
+// [Asset Tag, Serial Number, Model, Device Status, User, Site] — from the
+// "My Assets Self-Service Portal" export dated Aug 31, 2026.
+const NEXTP_REFRESH_AUG31 = [
+  ['JL3HFS3','JL3HFS3','Latitude 3540','Active','Savanna  Trotter','Main'],
+  ['HTKC5Y3','HTKC5Y3','Latitude 3540','Active','Angie  Mercado','Main'],
+  ['0F00C1L23153FB','0F00C1L23153FB','Surface Laptop 5','Active','Amogh Bhaskara','Main'],
+  ['67TMGX3','67TMGX3','Latitude 3520','Active','Felicia Santiago','Main'],
+  ['3DJC5Y3','3DJC5Y3','Latitude 3540','Active','Kimberly  Bertram','Main'],
+  ['0F0037G23203FB','0F0037G23203FB','Surface Laptop 5','Active','Brynn Newell','Main'],
+  ['GSMSRL3','GSMSRL3','Inspiron 16 7620 2-in-1','Active','Yesenia Zarzuela','Main'],
+  ['819Q4Y3','819Q4Y3','Latitude 3540','Decommissioned','','Main'],
+  ['FB0HFS3','FB0HFS3','Latitude 3540','Active','Vikhil Baswaraju','Main'],
+  ['61H6ZW3','61H6ZW3','Latitude 3540','Active','Ananya Thumma','Main'],
+  ['0F001Q223323FB','0F001Q223323FB','Surface Laptop 5','Active','Sri Akula','Main'],
+  ['J9JC5Y3','J9JC5Y3','Latitude 3540','Active','Frank Garofalo','Main'],
+  ['0F00CCL23223FB','0F00CCL23223FB','Surface Laptop 5','Active','Virginia Carone','Main'],
+  ['3K3KLS3','3K3KLS3','Latitude 3520','Active','Virginia Ortega','Main'],
+  ['099364423857','099364423857','Surface Laptop 4','Active','Autumn Balmer','Main'],
+  ['2MG6ZW3','2MG6ZW3','Latitude 3540','Active','Carmen Freeman','Main'],
+  ['CLF9ND3','CLF9ND3','Latitude 3520','Active','Christina Burrows','Main'],
+  ['023232214857','023232214857','Surface Laptop 4','Active','Sri Akula','Main'],
+  ['0F012A323353FB','0F012A323353FB','Surface Laptop 5','Active','Susan Rawlings','Main'],
+  ['0F01FA023123FB','0F01FA023123FB','Surface Laptop 5','Active','','Main'],
+  ['002168424257','002168424257','Surface Laptop 4','Active','Natarsha Nesbitt','Main'],
+  ['DGFXKY3','DGFXKY3','Latitude 3540','Active','Kumary Concepcion','Main'],
+  ['8NPMKY3','8NPMKY3','Latitude 3540','Active','Isabella Guzzi','Main'],
+  ['8PYGLY3','8PYGLY3','Latitude 3540','Active','Breyahn  Johnson','Main'],
+  ['BLDW4Y3','BLDW4Y3','Latitude 3540','Active','Christopher Weis','Main'],
+  ['1LWBQ04','1LWBQ04','Latitude 3540','Active','Heather Waugh','Main'],
+  ['GMPMKY3','GMPMKY3','Latitude 3540','Active','Teresita Singleton','Main'],
+  ['DDYXH04','DDYXH04','Latitude 3540','Active','Darlene Cornish','Main'],
+  ['3Y5HYW3','3Y5HYW3','Latitude 3540','Active','DeAndre  Williams','Main'],
+  ['BVVDR04','BVVDR04','Latitude 3540','Active','Paco Cruz','Main'],
+  ['9PSNYW3','9PSNYW3','Latitude 3540','Active','TeShaun Singleton','Main'],
+  ['89VDR04','89VDR04','Latitude 3540','Active','Maria Alonso-Keen','Main'],
+  ['1TCB214','1TCB214','Latitude 3540','Active','Keila Carrasco','Main'],
+  ['0F3FYJM24043FB','0F3FYJM24043FB','Surface Laptop 5','Active','Valerie Cerra','Main'],
+  ['1YXBQ04','1YXBQ04','Latitude 3540','Active','Sage Carrillo','Main'],
+  ['8GMRKY3','8GMRKY3','Latitude 3540','Active','Emily Hernandez','Main'],
+  ['43VSZ24','43VSZ24','Latitude 3540','Active','Logan Engle','Main'],
+  ['B3WSZ24','B3WSZ24','Latitude 3540','Active','Darline Laguerre','Main'],
+  ['FXXBQ04','FXXBQ04','Latitude 3540','Active','Koby Cerra','Main'],
+  ['13WSZ24','13WSZ24','Latitude 3540','Active','Ashanti Deshazo','Main'],
+  ['17VSZ24','17VSZ24','Latitude 3540','Active','Yekzenia Marquez-Colon','Main'],
+  ['67VSZ24','67VSZ24','Latitude 3540','Active','Anahid Sarkissian','Main'],
+  ['G3XSZ24','G3XSZ24','Latitude 3540','Active','Teresa Alonso','Main'],
+  ['GQWSZ24','GQWSZ24','Latitude 3540','Active','Katie Boylls','Main'],
+  ['C79XR34','C79XR34','Latitude 3550','Active','Amy Rawlings','Main'],
+  ['C2N7M34','C2N7M34','Latitude 3550','Active','Yuleth Davi','Main'],
+  ['0F01F9U23123FB','0F01F9U23123FB','Surface Laptop 5','Active','Nive Naik','Main'],
+  ['CKLS234','CKLS234','Latitude 3550','Active','Mounika Vasavi Battina','Main'],
+  ['1Y3YS34','1Y3YS34','Latitude 3450','Active','Abba Lopez','Main'],
+  ['62VBV34','62VBV34','Latitude 3450','Active','','Main'],
+  ['J28DL44','J28DL44','Latitude 3550','Active','Maggie Jackson','Main'],
+  ['H08DL44','H08DL44','Latitude 3550','Active','Brenda Fernandez','Main'],
+  ['6C8DL44','6C8DL44','Latitude 3550','Active','Yadira  Alquitela','Main'],
+  ['DN7VY44','DN7VY44','Latitude 3550','Active','Melissa Flores','Main'],
+  ['FTR4LY3','FTR4LY3','Latitude 3540','Active','Diane Morin','Main'],
+  ['F88DL44','F88DL44','Latitude 3550','Active','Jessica Lynn Gosinski','Main'],
+  ['7DZV954','7DZV954','Latitude 3550','Active','Amarah Khan','Main'],
+  ['8Q4W954','8Q4W954','Latitude 3550','Active','Ellisha Pardue','Main'],
+  ['C98DL44','C98DL44','Latitude 3550','Active','Anthony Guzzi','Main'],
+  ['8Z4CR44','8Z4CR44','Latitude 3550','Active','Sreevaishnavi Sanagavaram','Main'],
+  ['G55CR44','G55CR44','Latitude 3550','Active','Wanda Bermúdez-Cardé','Main'],
+  ['J82CR44','J82CR44','Latitude 3550','Active','Manish Ramchandani','Main'],
+  ['HZ4CR44','HZ4CR44','Latitude 3550','Active','Haley Brown','Main'],
+  ['8C2CR44','8C2CR44','Latitude 3550','Active','Mayra Alvarado','Main'],
+  ['G92CR44','G92CR44','Latitude 3550','Active','','Main'],
+  ['GGYXH04','GGYXH04','Latitude 3540','Spare','','Main'],
+  ['36ZJX54','36ZJX54','Latitude 3450','Active','Tessa Kopnisky','Main'],
+  ['13ZJX54','13ZJX54','Latitude 3450','Active','Haley Kirkpatrick','Main'],
+  ['96ZJX54','96ZJX54','Latitude 3450','Active','Rylie Santana','Main'],
+  ['HBYXH04','HBYXH04','Latitude 3540','Active','Luz Gomez','Main'],
+  ['0B3363Y24293GP','0B3363Y24293GP','Surface Laptop Go 3','Decommissioned','','Main'],
+  ['0B3364624293GP','0B3364624293GP','Surface Laptop Go 3','Active','Jeff Cornellier','Main'],
+  ['CNYGLY3','CNYGLY3','Latitude 3540','Active','','Main'],
+  ['8HLS234','8HLS234','Latitude 3550','Active','Andrea Villalpando','Main'],
+  ['25BKLY3','25BKLY3','Latitude 3540','Active','Monica Ramirez','Main'],
+  ['1XM7M34','1XM7M34','Latitude 3550','Active','','Main'],
+  ['CDLS234','CDLS234','Latitude 3550','Active','Luis Taveras','Main'],
+  ['9L7VY44','9L7VY44','Latitude 3550','Active','Phoebe Fernandez','Main'],
+  ['GHLS234','GHLS234','Latitude 3550','Active','Emily Salguero','Main'],
+  ['2RCKLY3','2RCKLY3','Latitude 3540','Active','Bita Shafaghat','Main'],
+  ['0F36RRH23433FB','0F36RRH23433FB','Surface Laptop 5','Active','Kathleen Jones','Main'],
+  ['9GWBQ04','9GWBQ04','Latitude 3540','Not Ready','','Main'],
+  ['0F38VCV25203GT','0F38VCV25203GT','Surface Laptop 6 for Business','Active','Dana Marsh','Main'],
+  ['PF5JAQ0N','PF5JAQ0N','21NU0032US','Active','Sri Akula','Main'],
+  ['481M1B3','481M1B3','Latitude 3520','Active','Cara Gustafson','Main'],
+  ['JBC0284','JBC0284','Dell Pro 16 Plus PB16255','Active','Bruce Gordon','Main'],
+  ['CND4420J58','CND4420J58','HP 250 15.6 inch G9 Notebook PC','Active','Ashanti Deshazo','Main'],
+  ['PF5ZLFL4','PF5ZLFL4','21QL001WUS','Active','Prajay Reddy Minuka','Main'],
+  ['PF5YWD5Z','PF5YWD5Z','21QL001WUS','Active','Harsh Sharma','Main'],
+  ['PF5TY4NG','PF5TY4NG','21QL001WUS','Active','Darvika Gogineni','Main'],
+  ['ANUJSPC','PF5YWWGD','21QL001WUS','Active','Anuj Satya Matta','Main'],
+  ['PF5S7E21','PF5S7E21','21QL001WUS','Active','Harshavardhan Reddy Naregudem','Main'],
+  ['PF5ZM4VG','PF5ZM4VG','21QL001WUS','Active','Abner Mason','Main'],
+  ['PF63TDQH','PF63TDQH','21QL001WUS','Spare','','Main'],
+  ['PF63LW1M','PF63LW1M','21QL001WUS','Active','Sadvilas Buddiga','Main'],
+  ['PF61CMAG','PF61CMAG','21QL001WUS','Active','Meredith Welsh','Main'],
+  ['PF63TC2V','PF63TC2V','21QL001WUS','Active','Srikanth Akula','Main'],
+  ['PF5W2TTG','PF5W2TTG','21QL001WUS','Active','Saiteja Godha','Main'],
+  ['PF5Z7HN8','PF5Z7HN8','21QR001EUS','Active','Bhargava Deep Guruvula','Main'],
+  ['BK34PJV25333P7','BK34PJV25333P7','Surface Laptop for Business 7th Edition with Intel','Active','Susan Rawlings','Main'],
+  ['PF626NFK','PF626NFK','21QL001WUS','Active','Berkley Nelson','Main'],
+  ['RAHAT-GGH','PF5YPK6A','21QR001EUS','Active','Rahat Bhalla','Main'],
+  ['HNYGLY3','HNYGLY3','Latitude 3540','Active','','Main'],
+  ['PF63LWFP','PF63LWFP','21QL001WUS','Active','Aditya Sharma','Main'],
+  ['Tonys-MBP.lan','C02GF5EYMD6R','MacBook Pro, Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz, 2019','Active','Tony Grassa','Remote - Skyhealth']
+];
+
+function npLocationFor(site){
+  return site === 'Main'
+    ? 'GroundGame Health – Main (Next Perimeter)'
+    : `GroundGame Health – ${site} (Next Perimeter)`;
+}
+
+async function reconcileNPFromExport(){
+  const added = [], updated = [], movedToInventory = [], movedToNP = [], unmatched = [];
+  let assetsChanged = false, nextpChanged = false;
+
+  for(const row of NEXTP_REFRESH_AUG31){
+    const [assetTag, serial, model, deviceStatus, user, site] = row;
+    const ns = normSerial(serial);
+    const hasUser = user && user.trim().length > 0;
+    const category = deriveCategory(model);
+    const location = npLocationFor(site);
+
+    let targetStatus, targetAssigned;
+    if(deviceStatus === 'Decommissioned'){
+      targetStatus = 'available'; // per the ledger's rule: decommissioned NP gear lives in Laptop Inventory as Available
+      targetAssigned = '';
+    } else if(deviceStatus === 'Spare'){
+      targetStatus = 'available'; targetAssigned = '';
+    } else if(deviceStatus === 'Not Ready'){
+      targetStatus = 'retained'; targetAssigned = '';
+    } else { // Active
+      targetStatus = hasUser ? 'provided' : 'available';
+      targetAssigned = hasUser ? user : '';
+    }
+    const belongsInNP = deviceStatus !== 'Decommissioned';
+
+    let existing = nextpAssets.find(a => normSerial(a.serial) === ns);
+    let existingStore = existing ? 'nextp' : null;
+    if(!existing){
+      existing = assets.find(a => normSerial(a.serial) === ns);
+      existingStore = existing ? 'serial' : null;
+    }
+
+    if(!existing){
+      const asset = {
+        id: uid(), name: category + ' — ' + (targetAssigned || 'Unassigned'),
+        category, serial, status: targetStatus, assigned: targetAssigned,
+        location, history: [], updated: today()
+      };
+      addHistory(asset, 'Added from Next Perimeter export', `Aug 31, 2026 export — ${deviceStatus}${hasUser ? ', assigned to '+user : ''}`);
+      if(belongsInNP){ nextpAssets.push(asset); nextpChanged = true; }
+      else { assets.push(asset); assetsChanged = true; }
+      added.push(`${assetTag} — new, added to ${belongsInNP ? 'Active Laptops (NP)' : 'Laptop Inventory'}`);
+      continue;
+    }
+
+    const changed = existing.status !== targetStatus || (existing.assigned||'') !== targetAssigned;
+    const wrongStore = (belongsInNP && existingStore === 'serial') || (!belongsInNP && existingStore === 'nextp');
+
+    if(wrongStore){
+      if(belongsInNP){
+        assets = assets.filter(x=>x.id !== existing.id);
+        existing.status = targetStatus; existing.assigned = targetAssigned; existing.location = location;
+        addHistory(existing, 'Moved to Active Laptops (NP)', `Aug 31, 2026 export — now ${deviceStatus}${hasUser ? ', assigned to '+user : ''}`);
+        nextpAssets.push(existing);
+        assetsChanged = true; nextpChanged = true;
+        movedToNP.push(`${assetTag} — moved from Laptop Inventory to Active Laptops (NP)`);
+      } else {
+        await moveNextPToSerializedAssets(existing, `Aug 31, 2026 export — marked ${deviceStatus} by Next Perimeter, moved to Laptop Inventory`);
+        movedToInventory.push(`${assetTag} — moved from Active Laptops (NP) to Laptop Inventory`);
+      }
+    } else if(changed){
+      const prevAssigned = existing.assigned || 'unassigned';
+      existing.status = targetStatus; existing.assigned = targetAssigned;
+      addHistory(existing, 'Updated from Next Perimeter export', `Aug 31, 2026 export — was ${prevAssigned}, now ${targetAssigned || 'unassigned'} (${deviceStatus})`);
+      if(existingStore === 'nextp') nextpChanged = true; else assetsChanged = true;
+      updated.push(`${assetTag} — ${prevAssigned} → ${targetAssigned || 'unassigned'} (${deviceStatus})`);
+    }
+  }
+
+  if(assetsChanged) await saveAssets();
+  if(nextpChanged) await saveNextPAssets();
+  render(); renderNextP();
+
+  let summary = `Next Perimeter export reconciled (${NEXTP_REFRESH_AUG31.length} rows).\n`;
+  summary += `\nAdded (${added.length}):\n` + (added.join('\n') || '—');
+  summary += `\n\nUpdated (${updated.length}):\n` + (updated.join('\n') || '—');
+  summary += `\n\nMoved to Active Laptops NP (${movedToNP.length}):\n` + (movedToNP.join('\n') || '—');
+  summary += `\n\nMoved to Laptop Inventory (${movedToInventory.length}):\n` + (movedToInventory.join('\n') || '—');
+  alert(summary);
+}
+document.getElementById('btnReconcileNP').onclick = reconcileNPFromExport;
 
 let bulkItems = [];
 let activeBulkId = null;
