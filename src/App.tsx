@@ -5,6 +5,8 @@ import { RequireAuth } from './features/auth/RequireAuth'
 import { DashboardPage } from './pages/DashboardPage'
 import { AssetListView } from './features/assets/AssetListView'
 import { AssetDetailPage } from './features/assets/AssetDetailPage'
+import { BulkStockListView } from './features/bulk/BulkStockListView'
+import { BulkItemDetailPage } from './features/bulk/BulkItemDetailPage'
 
 export function App() {
   return (
@@ -49,6 +51,8 @@ export function App() {
                     <AssetDetailPage collection="active_laptops_np" basePath="/active-laptops-np" />
                   }
                 />
+                <Route path="/bulk-stock" element={<BulkStockListView />} />
+                <Route path="/bulk-stock/:id" element={<BulkItemDetailPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </AppShell>

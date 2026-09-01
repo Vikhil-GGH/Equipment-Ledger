@@ -324,6 +324,13 @@ export interface Database {
             referencedRelation: 'bulk_items'
             referencedColumns: ['id']
           },
+          {
+            foreignKeyName: 'bulk_item_history_actor_user_id_fkey'
+            columns: ['actor_user_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
         ]
       }
       import_events: {
@@ -491,6 +498,27 @@ export interface Database {
           p_asset_id: string
           p_action: AssetAction
           p_assigned_to?: string | null
+          p_detail?: string | null
+        }
+        Returns: undefined
+      }
+      create_bulk_item: {
+        Args: {
+          [key: string]: unknown
+          p_name: string
+          p_category: string
+          p_location?: string | null
+          p_initial_quantity?: number
+        }
+        Returns: string
+      }
+      perform_bulk_action: {
+        Args: {
+          [key: string]: unknown
+          p_item_id: string
+          p_action: BulkAction
+          p_quantity: number
+          p_from_bucket?: BulkBucket | null
           p_detail?: string | null
         }
         Returns: undefined

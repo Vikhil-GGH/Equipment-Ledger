@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { to: '/', label: 'Dashboard' },
   { to: '/serialized-assets', label: 'Serialized Assets' },
   { to: '/active-laptops-np', label: 'Active Laptops (NP)' },
+  { to: '/bulk-stock', label: 'Bulk Stock' },
 ]
 
 export function AppShell({ children }: { children: ReactNode }) {
