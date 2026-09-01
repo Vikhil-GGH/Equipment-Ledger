@@ -1,12 +1,8 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../features/auth/useAuth'
+import { Drawer } from './Drawer'
 
-/**
- * Minimal authenticated shell with plain top nav for now. The mobile-first
- * pattern (slide-out drawer, card layouts) lands in the PWA/mobile pass
- * (build order step 7) — this proves routing end-to-end in the meantime.
- */
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard' },
   { to: '/serialized-assets', label: 'Serialized Assets' },
@@ -18,34 +14,40 @@ const NAV_ITEMS = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { profile, role, signOut } = useAuth()
+  const [drawerOpen, setDrawerOpen] = useState(false)
   const navItems = role === 'admin' ? [...NAV_ITEMS, { to: '/admin', label: 'Admin' }] : NAV_ITEMS
+
+  const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+    isActive
+      ? 'font-medium text-neutral-900 dark:text-neutral-100'
+      : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
 
   return (
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950">
-      <header className="flex flex-col gap-2 border-b border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900 sm:flex-row sm:items-center sm:justify-between">
+      <header className="flex items-center justify-between gap-3 border-b border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
         <div className="flex items-center gap-6">
+          <button
+            onClick={() => setDrawerOpen(true)}
+            aria-label="Open menu"
+            className="-ml-1 rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 sm:hidden dark:hover:bg-neutral-800"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M4 6h16M4 12h16M4 18h16" strokeLinecap="round" />
+            </svg>
+          </button>
           <span className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
             Equipment Ledger
           </span>
-          <nav className="flex flex-wrap gap-4 text-sm">
+          <nav className="hidden flex-wrap gap-4 text-sm sm:flex">
             {navItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.to === '/'}
-                className={({ isActive }) =>
-                  isActive
-                    ? 'font-medium text-neutral-900 dark:text-neutral-100'
-                    : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
-                }
-              >
+              <NavLink key={item.to} to={item.to} end={item.to === '/'} className={navLinkClass}>
                 {item.label}
               </NavLink>
             ))}
           </nav>
         </div>
         <div className="flex items-center gap-3 text-sm text-neutral-500">
-          <span>
+          <span className="hidden sm:inline">
             {profile?.email} <span className="text-neutral-400">· {profile?.role}</span>
           </span>
           <button
@@ -56,6 +58,33 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
         </div>
       </header>
+
+      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)}>
+        <div className="mb-4 border-b border-neutral-100 pb-3 dark:border-neutral-800">
+          <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
+            {profile?.email}
+          </p>
+          <p className="text-xs text-neutral-500">{profile?.role}</p>
+        </div>
+        {navItems.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.to === '/'}
+            onClick={() => setDrawerOpen(false)}
+            className={({ isActive }) =>
+              `rounded-md px-3 py-2 text-sm ${
+                isActive
+                  ? 'bg-neutral-100 font-medium text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100'
+                  : 'text-neutral-600 hover:bg-neutral-50 dark:text-neutral-400 dark:hover:bg-neutral-800/50'
+              }`
+            }
+          >
+            {item.label}
+          </NavLink>
+        ))}
+      </Drawer>
+
       <main className="p-4">{children}</main>
     </div>
   )
