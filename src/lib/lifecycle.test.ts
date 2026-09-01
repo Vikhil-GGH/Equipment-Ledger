@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  SWAP_CANDIDATE_STATUSES,
+  canSwap,
   getAllowedActions,
   getStatusLabel,
   isActionAllowed,
@@ -104,5 +106,21 @@ describe('getStatusLabel', () => {
   it('does not relabel other statuses in active_laptops_np', () => {
     expect(getStatusLabel('available', 'active_laptops_np')).toBe('Available')
     expect(getStatusLabel('decommissioned', 'active_laptops_np')).toBe('Decommissioned')
+  })
+})
+
+describe('canSwap', () => {
+  it('is only true when status is provided', () => {
+    expect(canSwap('provided')).toBe(true)
+    for (const status of Object.keys(EXPECTED) as AssetStatus[]) {
+      if (status === 'provided') continue
+      expect(canSwap(status)).toBe(false)
+    }
+  })
+})
+
+describe('SWAP_CANDIDATE_STATUSES', () => {
+  it('is exactly available and decommissioned', () => {
+    expect([...SWAP_CANDIDATE_STATUSES].sort()).toEqual(['available', 'decommissioned'])
   })
 })

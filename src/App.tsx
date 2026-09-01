@@ -7,6 +7,10 @@ import { AssetListView } from './features/assets/AssetListView'
 import { AssetDetailPage } from './features/assets/AssetDetailPage'
 import { BulkStockListView } from './features/bulk/BulkStockListView'
 import { BulkItemDetailPage } from './features/bulk/BulkItemDetailPage'
+import { OnboardingListPage } from './features/onboarding/OnboardingListPage'
+import { OnboardingDetailPage } from './features/onboarding/OnboardingDetailPage'
+import { OffboardingListPage } from './features/offboarding/OffboardingListPage'
+import { OffboardingTrackPage } from './features/offboarding/OffboardingTrackPage'
 
 export function App() {
   return (
@@ -53,6 +57,10 @@ export function App() {
                 />
                 <Route path="/bulk-stock" element={<BulkStockListView />} />
                 <Route path="/bulk-stock/:id" element={<BulkItemDetailPage />} />
+                <Route path="/onboarding" element={<OnboardingListPage />} />
+                <Route path="/onboarding/:id" element={<OnboardingDetailPage />} />
+                <Route path="/offboarding" element={<OffboardingListPage />} />
+                <Route path="/offboarding/:id" element={<OffboardingTrackPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </AppShell>

@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import type { AssetAction, AssetCollection } from '../../types/database.types'
-import { ACTION_LABELS, ACTIONS_REQUIRING_ASSIGNEE, getAllowedActions } from '../../lib/lifecycle'
+import { ACTION_LABELS, ACTIONS_REQUIRING_ASSIGNEE, canSwap, getAllowedActions } from '../../lib/lifecycle'
 import { getErrorMessage } from '../../lib/errors'
 import { useAuth } from '../auth/useAuth'
 import { usePerformLifecycleAction, type AssetRow } from './api'
+import { SwapPanel } from './SwapPanel'
 
 /**
  * Renders only the buttons the current status allows (getAllowedActions) —
@@ -20,6 +21,7 @@ export function ActionPanel({
   const { role } = useAuth()
   const performAction = usePerformLifecycleAction(collection)
   const [pendingAction, setPendingAction] = useState<AssetAction | null>(null)
+  const [showSwap, setShowSwap] = useState(false)
   const [assignedTo, setAssignedTo] = useState('')
   const [detail, setDetail] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -29,8 +31,10 @@ export function ActionPanel({
   const allowed = getAllowedActions(asset.status)
   const visibleActions =
     role === 'scanner' ? allowed.filter((a) => a === 'provide' || a === 'collect') : allowed
+  // Swap is Editor/Admin only, same boundary as the other non-basic actions.
+  const canShowSwap = (role === 'admin' || role === 'editor') && canSwap(asset.status)
 
-  if (visibleActions.length === 0) return null
+  if (visibleActions.length === 0 && !canShowSwap) return null
 
   function startAction(action: AssetAction) {
     setError(null)
@@ -54,6 +58,17 @@ export function ActionPanel({
       console.error('perform_lifecycle_action failed:', err)
       setError(getErrorMessage(err, 'Action failed'))
     }
+  }
+
+  if (showSwap) {
+    return (
+      <SwapPanel
+        collection={collection}
+        asset={asset}
+        onDone={() => setShowSwap(false)}
+        onCancel={() => setShowSwap(false)}
+      />
+    )
   }
 
   if (pendingAction) {
@@ -110,6 +125,11 @@ export function ActionPanel({
           {ACTION_LABELS[action]}
         </button>
       ))}
+      {canShowSwap && (
+        <button className="btn-secondary" onClick={() => setShowSwap(true)}>
+          Swap
+        </button>
+      )}
     </div>
   )
 }

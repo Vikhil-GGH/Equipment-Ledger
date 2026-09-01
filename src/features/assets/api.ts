@@ -154,6 +154,54 @@ export function usePerformLifecycleAction(collection: AssetCollection) {
   })
 }
 
+export function useSwapCandidates(collection: AssetCollection, excludeId: string | undefined) {
+  return useQuery({
+    queryKey: ['assets', collection, 'swap-candidates', excludeId],
+    enabled: !!excludeId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from(collection)
+        .select('id, name, serial, status')
+        .in('status', ['available', 'decommissioned'])
+        .neq('id', excludeId!)
+        .order('serial', { ascending: true })
+      if (error) throw error
+      return data as Pick<AssetRow, 'id' | 'name' | 'serial' | 'status'>[]
+    },
+  })
+}
+
+export interface SwapInput {
+  oldAssetId: string
+  newAssetId: string
+  reason: string
+}
+
+export function useSwap(collection: AssetCollection) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ oldAssetId, newAssetId, reason }: SwapInput) => {
+      const { error } = await supabase.rpc('perform_swap', {
+        p_collection: collection,
+        p_old_asset_id: oldAssetId,
+        p_new_asset_id: newAssetId,
+        p_reason: reason,
+      })
+      if (error) throw error
+    },
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ['assets', collection] })
+      void queryClient.invalidateQueries({ queryKey: ['stats', collection] })
+      void queryClient.invalidateQueries({
+        queryKey: ['assets', collection, 'detail', variables.oldAssetId],
+      })
+      void queryClient.invalidateQueries({
+        queryKey: ['assets', collection, 'detail', variables.newAssetId],
+      })
+    },
+  })
+}
+
 export function useAssetStats(collection: AssetCollection) {
   return useQuery({
     queryKey: ['stats', collection],

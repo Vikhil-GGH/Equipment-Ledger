@@ -502,6 +502,27 @@ export interface Database {
         }
         Returns: undefined
       }
+      perform_swap: {
+        Args: {
+          [key: string]: unknown
+          p_collection: AssetCollection
+          p_old_asset_id: string
+          p_new_asset_id: string
+          p_reason: string
+        }
+        Returns: undefined
+      }
+      onboarding_assign_device: {
+        Args: {
+          [key: string]: unknown
+          p_onboarding_id: string
+          p_serial: string
+          p_name?: string | null
+          p_category?: string | null
+          p_location?: string | null
+        }
+        Returns: string
+      }
       create_bulk_item: {
         Args: {
           [key: string]: unknown

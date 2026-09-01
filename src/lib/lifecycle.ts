@@ -76,6 +76,18 @@ export function isTerminal(status: AssetStatus): boolean {
 }
 
 /**
+ * Swap is deliberately not in TRANSITIONS/AssetAction — it mutates two rows
+ * atomically (perform_swap) rather than a single status transition — but it
+ * shares the same "only from provided" gate as Collect/Transfer/Decommission.
+ */
+export function canSwap(status: AssetStatus): boolean {
+  return status === 'provided'
+}
+
+/** Statuses a swap replacement candidate must have. */
+export const SWAP_CANDIDATE_STATUSES: AssetStatus[] = ['available', 'decommissioned']
+
+/**
  * Active Laptops (NP) displays 'provided' as "Active" in its UI only — the
  * underlying enum value is unchanged. Every other status/collection uses
  * the plain capitalized enum value.
