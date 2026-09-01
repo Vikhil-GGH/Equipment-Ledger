@@ -17,7 +17,8 @@ const NAV_ITEMS = [
 ]
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { profile, signOut } = useAuth()
+  const { profile, role, signOut } = useAuth()
+  const navItems = role === 'admin' ? [...NAV_ITEMS, { to: '/admin', label: 'Admin' }] : NAV_ITEMS
 
   return (
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950">
@@ -26,8 +27,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           <span className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
             Equipment Ledger
           </span>
-          <nav className="flex gap-4 text-sm">
-            {NAV_ITEMS.map((item) => (
+          <nav className="flex flex-wrap gap-4 text-sm">
+            {navItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
