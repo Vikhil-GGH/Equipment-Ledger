@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from './app/AppShell'
 import { LoginPage } from './features/auth/LoginPage'
@@ -14,6 +15,11 @@ import { OffboardingListPage } from './features/offboarding/OffboardingListPage'
 import { OffboardingTrackPage } from './features/offboarding/OffboardingTrackPage'
 import { AdminPage } from './features/admin/AdminPage'
 
+// html5-qrcode pulls in a full JS barcode/QR decoder (~350KB+ gzipped) —
+// code-split it so that weight only loads for someone who actually visits
+// the scan page, not on every app load.
+const ScanPage = lazy(() => import('./features/scan/ScanPage').then((m) => ({ default: m.ScanPage })))
+
 export function App() {
   return (
     <Routes>
@@ -25,6 +31,14 @@ export function App() {
             <AppShell>
               <Routes>
                 <Route path="/" element={<DashboardPage />} />
+                <Route
+                  path="/scan"
+                  element={
+                    <Suspense fallback={<p className="text-sm text-neutral-500">Loading…</p>}>
+                      <ScanPage />
+                    </Suspense>
+                  }
+                />
                 <Route
                   path="/serialized-assets"
                   element={

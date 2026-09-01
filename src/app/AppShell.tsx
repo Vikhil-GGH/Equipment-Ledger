@@ -1,10 +1,11 @@
 import { useState, type ReactNode } from 'react'
-import { NavLink } from 'react-router-dom'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../features/auth/useAuth'
 import { Drawer } from './Drawer'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard' },
+  { to: '/scan', label: 'Scan' },
   { to: '/serialized-assets', label: 'Serialized Assets' },
   { to: '/active-laptops-np', label: 'Active Laptops (NP)' },
   { to: '/bulk-stock', label: 'Bulk Stock' },
@@ -15,6 +16,7 @@ const NAV_ITEMS = [
 export function AppShell({ children }: { children: ReactNode }) {
   const { profile, role, signOut } = useAuth()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const location = useLocation()
   const navItems = role === 'admin' ? [...NAV_ITEMS, { to: '/admin', label: 'Admin' }] : NAV_ITEMS
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -85,7 +87,23 @@ export function AppShell({ children }: { children: ReactNode }) {
         ))}
       </Drawer>
 
-      <main className="p-4">{children}</main>
+      <main className="p-4 pb-24 sm:pb-4">{children}</main>
+
+      {location.pathname !== '/scan' && (
+        <Link
+          to="/scan"
+          aria-label="Scan a barcode"
+          className="fixed bottom-6 right-6 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg transition hover:bg-emerald-700 sm:hidden"
+        >
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path
+              d="M4 8V6a2 2 0 0 1 2-2h2M20 8V6a2 2 0 0 0-2-2h-2M4 16v2a2 2 0 0 0 2 2h2M20 16v2a2 2 0 0 1-2 2h-2M7 12h10"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </Link>
+      )}
     </div>
   )
 }
