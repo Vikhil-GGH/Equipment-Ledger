@@ -1,21 +1,45 @@
 import type { ReactNode } from 'react'
+import { NavLink } from 'react-router-dom'
 import { useAuth } from '../features/auth/useAuth'
 
 /**
- * Minimal authenticated shell for Phase 2 (auth/routing only). The
- * mobile-first nav (slide-out drawer, card layouts) lands in the PWA/
- * mobile-responsive pass (build order step 7) — this just proves the
- * auth + routing skeleton end-to-end for now.
+ * Minimal authenticated shell with plain top nav for now. The mobile-first
+ * pattern (slide-out drawer, card layouts) lands in the PWA/mobile pass
+ * (build order step 7) — this proves routing end-to-end in the meantime.
  */
+const NAV_ITEMS = [
+  { to: '/', label: 'Dashboard' },
+  { to: '/serialized-assets', label: 'Serialized Assets' },
+  { to: '/active-laptops-np', label: 'Active Laptops (NP)' },
+]
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { profile, signOut } = useAuth()
 
   return (
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950">
-      <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
-        <span className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-          Equipment Ledger
-        </span>
+      <header className="flex flex-col gap-2 border-b border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-6">
+          <span className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+            Equipment Ledger
+          </span>
+          <nav className="flex gap-4 text-sm">
+            {NAV_ITEMS.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === '/'}
+                className={({ isActive }) =>
+                  isActive
+                    ? 'font-medium text-neutral-900 dark:text-neutral-100'
+                    : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
+                }
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
+        </div>
         <div className="flex items-center gap-3 text-sm text-neutral-500">
           <span>
             {profile?.email} <span className="text-neutral-400">· {profile?.role}</span>

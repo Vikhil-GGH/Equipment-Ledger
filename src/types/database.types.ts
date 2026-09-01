@@ -50,26 +50,15 @@ export type BulkAction =
   | 'repair'
   | 'decommission'
 
-interface SerializedAssetRow {
-  id: string
-  name: string
-  category: string
-  serial: string
-  status: AssetStatus
-  assigned_to: string | null
-  location: string | null
-  created_at: string
-  updated_at: string
-}
-
-interface AssetHistoryRow {
-  id: string
-  asset_id: string
-  date: string
-  action: string
-  detail: string | null
-  actor_user_id: string | null
-}
+// NOTE: Table Row/Insert/Update types are written as inline object literals
+// throughout this file, deliberately not factored into shared named
+// interfaces (even though serialized_assets/active_laptops_np and their
+// history tables are identical in shape). Supabase's generic Postgrest
+// typing constrains Tables to `Record<string, GenericTable>`, and a named
+// interface reference (as opposed to an inline literal) fails that
+// constraint under this TypeScript version — silently degrading `.rpc()`
+// argument types to `undefined`. Keep every Row/Insert/Update below as an
+// inline literal; don't reintroduce a shared interface here.
 
 export interface Database {
   public: {
@@ -102,7 +91,17 @@ export interface Database {
         Relationships: []
       }
       serialized_assets: {
-        Row: SerializedAssetRow
+        Row: {
+          id: string
+          name: string
+          category: string
+          serial: string
+          status: AssetStatus
+          assigned_to: string | null
+          location: string | null
+          created_at: string
+          updated_at: string
+        }
         Insert: {
           id?: string
           name: string
@@ -114,11 +113,28 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
-        Update: Partial<SerializedAssetRow>
+        Update: {
+          id?: string
+          name?: string
+          category?: string
+          serial?: string
+          status?: AssetStatus
+          assigned_to?: string | null
+          location?: string | null
+          created_at?: string
+          updated_at?: string
+        }
         Relationships: []
       }
       serialized_asset_history: {
-        Row: AssetHistoryRow
+        Row: {
+          id: string
+          asset_id: string
+          date: string
+          action: string
+          detail: string | null
+          actor_user_id: string | null
+        }
         Insert: {
           id?: string
           asset_id: string
@@ -127,7 +143,14 @@ export interface Database {
           detail?: string | null
           actor_user_id?: string | null
         }
-        Update: Partial<AssetHistoryRow>
+        Update: {
+          id?: string
+          asset_id?: string
+          date?: string
+          action?: string
+          detail?: string | null
+          actor_user_id?: string | null
+        }
         Relationships: [
           {
             foreignKeyName: 'serialized_asset_history_asset_id_fkey'
@@ -136,10 +159,27 @@ export interface Database {
             referencedRelation: 'serialized_assets'
             referencedColumns: ['id']
           },
+          {
+            foreignKeyName: 'serialized_asset_history_actor_user_id_fkey'
+            columns: ['actor_user_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
         ]
       }
       active_laptops_np: {
-        Row: SerializedAssetRow
+        Row: {
+          id: string
+          name: string
+          category: string
+          serial: string
+          status: AssetStatus
+          assigned_to: string | null
+          location: string | null
+          created_at: string
+          updated_at: string
+        }
         Insert: {
           id?: string
           name: string
@@ -151,11 +191,28 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
-        Update: Partial<SerializedAssetRow>
+        Update: {
+          id?: string
+          name?: string
+          category?: string
+          serial?: string
+          status?: AssetStatus
+          assigned_to?: string | null
+          location?: string | null
+          created_at?: string
+          updated_at?: string
+        }
         Relationships: []
       }
       active_laptops_np_history: {
-        Row: AssetHistoryRow
+        Row: {
+          id: string
+          asset_id: string
+          date: string
+          action: string
+          detail: string | null
+          actor_user_id: string | null
+        }
         Insert: {
           id?: string
           asset_id: string
@@ -164,13 +221,27 @@ export interface Database {
           detail?: string | null
           actor_user_id?: string | null
         }
-        Update: Partial<AssetHistoryRow>
+        Update: {
+          id?: string
+          asset_id?: string
+          date?: string
+          action?: string
+          detail?: string | null
+          actor_user_id?: string | null
+        }
         Relationships: [
           {
             foreignKeyName: 'active_laptops_np_history_asset_id_fkey'
             columns: ['asset_id']
             isOneToOne: false
             referencedRelation: 'active_laptops_np'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'active_laptops_np_history_actor_user_id_fkey'
+            columns: ['actor_user_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
             referencedColumns: ['id']
           },
         ]
@@ -400,6 +471,30 @@ export interface Database {
       is_admin: { Args: Record<string, never>; Returns: boolean }
       is_editor_or_admin: { Args: Record<string, never>; Returns: boolean }
       is_known_user: { Args: Record<string, never>; Returns: boolean }
+      create_asset: {
+        Args: {
+          [key: string]: unknown
+          p_collection: AssetCollection
+          p_name: string
+          p_category: string
+          p_serial: string
+          p_status?: AssetStatus
+          p_assigned_to?: string | null
+          p_location?: string | null
+        }
+        Returns: string
+      }
+      perform_lifecycle_action: {
+        Args: {
+          [key: string]: unknown
+          p_collection: AssetCollection
+          p_asset_id: string
+          p_action: AssetAction
+          p_assigned_to?: string | null
+          p_detail?: string | null
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       user_role: UserRole
