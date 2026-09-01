@@ -2612,9 +2612,9 @@ function offboardCheckboxHtml(a, key, label){
 }
 
 function offboardActionButtons(status){
-  if(status==='available') return [{label:'Mark active', cls:'btn-accent', action:'provide'},{label:'Retain', cls:'btn-ghost', action:'retain'},{label:'Mark damaged', cls:'btn-warn', action:'damage'}];
+  if(status==='available') return [{label:'Mark active', cls:'btn-accent', action:'provide'},{label:'Retain', cls:'btn-ghost', action:'retain'},{label:'Mark damaged', cls:'btn-warn', action:'damage'},{label:'Decommission (move to Inventory)', cls:'btn-decom', action:'decommission'}];
   if(status==='provided') return [{label:'Collect', cls:'btn-ghost', action:'collect'},{label:'Transfer', cls:'btn-accent', action:'transfer'},{label:'Swap', cls:'btn-warn', action:'swap'},{label:'Mark damaged', cls:'btn-warn', action:'damage'},{label:'Decommission (employee left)', cls:'btn-decom', action:'decommission'}];
-  if(status==='retained') return [{label:'Mark active', cls:'btn-accent', action:'provide'},{label:'Mark damaged', cls:'btn-warn', action:'damage'}];
+  if(status==='retained') return [{label:'Mark active', cls:'btn-accent', action:'provide'},{label:'Mark damaged', cls:'btn-warn', action:'damage'},{label:'Decommission (move to Inventory)', cls:'btn-decom', action:'decommission'}];
   if(status==='damaged') return [{label:'Mark repaired', cls:'btn-accent', action:'repair'},{label:'Mark non-functional', cls:'btn-nonfunc', action:'nonfunctional'}];
   if(status==='decommissioned') return [{label:'Mark active', cls:'btn-accent', action:'provide'},{label:'Retain', cls:'btn-ghost', action:'retain'},{label:'Mark damaged', cls:'btn-warn', action:'damage'}];
   return [];
@@ -3277,6 +3277,7 @@ function renderNextPActionRow(a){
     buttons.push({label:'Mark active', cls:'btn-accent', action:'provide'});
     buttons.push({label:'Retain', cls:'btn-ghost', action:'retain'});
     buttons.push({label:'Mark damaged', cls:'btn-warn', action:'damage'});
+    buttons.push({label:'Decommission (move to Inventory)', cls:'btn-decom', action:'decommission'});
   } else if(a.status==='provided'){
     buttons.push({label:'Collect', cls:'btn-ghost', action:'collect'});
     buttons.push({label:'Transfer', cls:'btn-accent', action:'transfer'});
@@ -3286,6 +3287,7 @@ function renderNextPActionRow(a){
   } else if(a.status==='retained'){
     buttons.push({label:'Mark active', cls:'btn-accent', action:'provide'});
     buttons.push({label:'Mark damaged', cls:'btn-warn', action:'damage'});
+    buttons.push({label:'Decommission (move to Inventory)', cls:'btn-decom', action:'decommission'});
   } else if(a.status==='damaged'){
     buttons.push({label:'Mark repaired', cls:'btn-accent', action:'repair'});
     buttons.push({label:'Mark non-functional', cls:'btn-nonfunc', action:'nonfunctional'});
