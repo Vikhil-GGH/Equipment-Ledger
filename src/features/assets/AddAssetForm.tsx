@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import type { AssetCollection } from '../../types/database.types'
+import { getErrorMessage } from '../../lib/errors'
 import { useCreateAsset } from './api'
 
 export function AddAssetForm({
@@ -32,7 +33,8 @@ export function AddAssetForm({
       })
       onCreated(id)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create asset')
+      console.error('create_asset failed:', err)
+      setError(getErrorMessage(err, 'Failed to create asset'))
     }
   }
 

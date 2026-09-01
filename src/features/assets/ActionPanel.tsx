@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { AssetAction, AssetCollection } from '../../types/database.types'
 import { ACTION_LABELS, ACTIONS_REQUIRING_ASSIGNEE, getAllowedActions } from '../../lib/lifecycle'
+import { getErrorMessage } from '../../lib/errors'
 import { useAuth } from '../auth/useAuth'
 import { usePerformLifecycleAction, type AssetRow } from './api'
 
@@ -50,7 +51,8 @@ export function ActionPanel({
       })
       setPendingAction(null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Action failed')
+      console.error('perform_lifecycle_action failed:', err)
+      setError(getErrorMessage(err, 'Action failed'))
     }
   }
 
