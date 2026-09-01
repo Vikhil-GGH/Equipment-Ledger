@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
 import { getErrorMessage } from '../../lib/errors'
 
@@ -15,7 +15,7 @@ const FORMATS = [
 ]
 
 export function BarcodeScanner({ onDetected }: { onDetected: (value: string) => void }) {
-  const containerId = useRef(`barcode-scanner-${Math.random().toString(36).slice(2)}`)
+  const containerId = useId()
   const [error, setError] = useState<string | null>(null)
   const onDetectedRef = useRef(onDetected)
 
@@ -27,7 +27,7 @@ export function BarcodeScanner({ onDetected }: { onDetected: (value: string) => 
     let cancelled = false
     let detected = false
 
-    const scanner = new Html5Qrcode(containerId.current, {
+    const scanner = new Html5Qrcode(containerId, {
       formatsToSupport: FORMATS,
       // Prefer the native BarcodeDetector API where the browser supports
       // it; html5-qrcode transparently falls back to its own JS decoder
@@ -79,11 +79,13 @@ export function BarcodeScanner({ onDetected }: { onDetected: (value: string) => 
         }
       }
     }
-  }, [])
+    // containerId (useId()) is stable for the component's lifetime, so this
+    // effect intentionally still only runs once on mount.
+  }, [containerId])
 
   return (
     <div>
-      <div id={containerId.current} className="overflow-hidden rounded-lg bg-black" />
+      <div id={containerId} className="overflow-hidden rounded-lg bg-black" />
       {error && (
         <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">
           {error}
