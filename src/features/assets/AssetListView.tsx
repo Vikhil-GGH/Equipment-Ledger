@@ -22,6 +22,7 @@ export function AssetListView({
   const { data: assets, isLoading, error } = useAssetsList(collection, search)
 
   const canAdd = role === 'admin' || role === 'editor' || role === 'scanner'
+  const canImport = role === 'admin' || role === 'editor'
 
   return (
     <div className="space-y-4">
@@ -34,6 +35,14 @@ export function AssetListView({
             onChange={(e) => setSearch(e.target.value)}
             className="input sm:w-64"
           />
+          {canImport && (
+            <Link
+              to={`/import?target=${collection}`}
+              className="btn-secondary whitespace-nowrap"
+            >
+              Import from Excel
+            </Link>
+          )}
           {canAdd && (
             <button className="btn-primary whitespace-nowrap" onClick={() => setShowAdd(true)}>
               Add asset

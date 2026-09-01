@@ -15,10 +15,12 @@ import { OffboardingListPage } from './features/offboarding/OffboardingListPage'
 import { OffboardingTrackPage } from './features/offboarding/OffboardingTrackPage'
 import { AdminPage } from './features/admin/AdminPage'
 
-// html5-qrcode pulls in a full JS barcode/QR decoder (~350KB+ gzipped) —
-// code-split it so that weight only loads for someone who actually visits
-// the scan page, not on every app load.
+// html5-qrcode and xlsx (SheetJS) are both heavy — code-split so that
+// weight only loads for someone who actually visits these pages.
 const ScanPage = lazy(() => import('./features/scan/ScanPage').then((m) => ({ default: m.ScanPage })))
+const ImportPage = lazy(() =>
+  import('./features/import/ImportPage').then((m) => ({ default: m.ImportPage })),
+)
 
 export function App() {
   return (
@@ -82,6 +84,16 @@ export function App() {
                   element={
                     <RequireRole allow={['admin']}>
                       <AdminPage />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/import"
+                  element={
+                    <RequireRole allow={['admin', 'editor']}>
+                      <Suspense fallback={<p className="text-sm text-neutral-500">Loading…</p>}>
+                        <ImportPage />
+                      </Suspense>
                     </RequireRole>
                   }
                 />

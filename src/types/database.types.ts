@@ -544,6 +544,23 @@ export interface Database {
         }
         Returns: undefined
       }
+      commit_asset_import: {
+        Args: {
+          [key: string]: unknown
+          p_collection: AssetCollection
+          p_filename: string
+          p_rows: Json
+        }
+        Returns: Json
+      }
+      commit_bulk_import: {
+        Args: {
+          [key: string]: unknown
+          p_filename: string
+          p_rows: Json
+        }
+        Returns: Json
+      }
     }
     Enums: {
       user_role: UserRole

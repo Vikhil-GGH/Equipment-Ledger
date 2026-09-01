@@ -32,6 +32,11 @@ export function BulkStockListView() {
             className="input sm:w-64"
           />
           {canAdd && (
+            <Link to="/import?target=bulk_items" className="btn-secondary whitespace-nowrap">
+              Import from Excel
+            </Link>
+          )}
+          {canAdd && (
             <button className="btn-primary whitespace-nowrap" onClick={() => setShowAdd(true)}>
               Add item
             </button>

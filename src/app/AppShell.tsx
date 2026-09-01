@@ -17,7 +17,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { profile, role, signOut } = useAuth()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const location = useLocation()
-  const navItems = role === 'admin' ? [...NAV_ITEMS, { to: '/admin', label: 'Admin' }] : NAV_ITEMS
+  const navItems = [
+    ...NAV_ITEMS,
+    ...(role === 'admin' || role === 'editor' ? [{ to: '/import', label: 'Import' }] : []),
+    ...(role === 'admin' ? [{ to: '/admin', label: 'Admin' }] : []),
+  ]
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     isActive
