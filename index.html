@@ -1862,8 +1862,12 @@ document.getElementById('bulkFilterCategory').addEventListener('change', renderB
 
 /* ---- Barcode Scan ---- */
 let html5QrCodeInstance = null;
+let scanTimeoutId = null;
+let scanTickId = null;
 
 async function stopScan(){
+  if(scanTimeoutId){ clearTimeout(scanTimeoutId); scanTimeoutId = null; }
+  if(scanTickId){ clearInterval(scanTickId); scanTickId = null; }
   if(html5QrCodeInstance){
     try{
       await html5QrCodeInstance.stop();
@@ -1879,6 +1883,8 @@ async function stopScan(){
   if(hint) hint.style.display = 'none';
 }
 
+const SCAN_TIMEOUT_SECONDS = 20;
+
 document.getElementById('btnStartScan').onclick = async ()=>{
   document.getElementById('scanResult').innerHTML = '';
   if(typeof Html5Qrcode === 'undefined'){
@@ -1887,7 +1893,10 @@ document.getElementById('btnStartScan').onclick = async ()=>{
   }
   document.getElementById('btnStartScan').style.display = 'none';
   document.getElementById('btnStopScan').style.display = 'inline-block';
-  document.getElementById('scanHint').style.display = 'block';
+  const hintEl = document.getElementById('scanHint');
+  hintEl.style.display = 'block';
+  let secondsLeft = SCAN_TIMEOUT_SECONDS;
+  hintEl.textContent = `Hold steady and fill the frame with the barcode — searching... (${secondsLeft}s)`;
   html5QrCodeInstance = new Html5Qrcode("scanReader");
   const responsiveBox = (viewfinderWidth, viewfinderHeight)=>{
     const size = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.75);
@@ -1900,6 +1909,21 @@ document.getElementById('btnStartScan').onclick = async ()=>{
       onScanSuccess,
       ()=>{}
     );
+    scanTickId = setInterval(()=>{
+      secondsLeft--;
+      if(secondsLeft > 0){
+        hintEl.textContent = `Hold steady and fill the frame with the barcode — searching... (${secondsLeft}s)`;
+      }
+    }, 1000);
+    scanTimeoutId = setTimeout(async ()=>{
+      await stopScan();
+      document.getElementById('scanResult').innerHTML = `
+        <div class="table-card" style="padding:16px;">
+          <div style="font-size:13px;font-weight:600;color:var(--warn);margin-bottom:6px;">Failed Scan — Unable to scan</div>
+          <div style="font-size:12.5px;color:var(--ink-soft);">No barcode was detected in ${SCAN_TIMEOUT_SECONDS} seconds. Try moving a bit closer or further away, improve lighting, or hold the device steadier — or just use manual entry below instead.</div>
+        </div>
+      `;
+    }, SCAN_TIMEOUT_SECONDS * 1000);
   }catch(err){
     document.getElementById('scanResult').innerHTML = `<div style="color:var(--warn);font-size:13px;">Camera access failed: ${escapeHtml(err && err.message ? err.message : String(err))}. This almost always means camera access isn't available here — try opening the downloaded file directly in your phone or computer's browser rather than inside Claude's preview panel, or just use the manual entry field below.</div>`;
     document.getElementById('btnStartScan').style.display = 'inline-block';
@@ -1956,29 +1980,35 @@ function handleScannedSerial(rawText){
   } else {
     el.innerHTML = `
       <div class="table-card" style="padding:16px;">
-        <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:6px;">Scanned <b>${escapeHtml(rawText)}</b> — not found in any section.</div>
-        <div style="font-size:12px;color:var(--ink-faint);margin-bottom:12px;">Add it as a new record with this serial pre-filled:</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn btn-ghost btn-sm" id="btnScanAddSerial">Add to Laptop Inventory</button>
-          <button class="btn btn-ghost btn-sm" id="btnScanAddNP">Add to Active Laptops (NP)</button>
-          <button class="btn btn-ghost btn-sm" id="btnScanAddMonitor">Add to Monitors</button>
+        <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:10px;">Scanned <b>${escapeHtml(rawText)}</b> — not found in any section.</div>
+        <div class="field">
+          <label>Select category</label>
+          <select id="scanCategorySelect">
+            <option value="serial">Laptop Inventory</option>
+            <option value="nextp">Active Laptops (NP)</option>
+            <option value="monitors">Monitor</option>
+          </select>
+        </div>
+        <div class="modal-actions" style="justify-content:flex-start;margin-top:10px;">
+          <button class="btn btn-primary btn-sm" id="btnScanAddNew">Add to selected section</button>
         </div>
       </div>
     `;
-    document.getElementById('btnScanAddSerial').onclick = ()=>{
-      showTab('serial');
-      openOverlay('addOverlay');
-      document.getElementById('f_serial').value = rawText;
-    };
-    document.getElementById('btnScanAddNP').onclick = ()=>{
-      showTab('nextp');
-      openOverlay('addNextPOverlay');
-      document.getElementById('np_serial').value = rawText;
-    };
-    document.getElementById('btnScanAddMonitor').onclick = ()=>{
-      showTab('monitors');
-      openOverlay('addMonitorOverlay');
-      document.getElementById('mon_serial').value = rawText;
+    document.getElementById('btnScanAddNew').onclick = ()=>{
+      const choice = document.getElementById('scanCategorySelect').value;
+      if(choice === 'serial'){
+        showTab('serial');
+        openOverlay('addOverlay');
+        document.getElementById('f_serial').value = rawText;
+      } else if(choice === 'nextp'){
+        showTab('nextp');
+        openOverlay('addNextPOverlay');
+        document.getElementById('np_serial').value = rawText;
+      } else {
+        showTab('monitors');
+        openOverlay('addMonitorOverlay');
+        document.getElementById('mon_serial').value = rawText;
+      }
     };
   }
 }
