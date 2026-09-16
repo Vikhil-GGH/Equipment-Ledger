@@ -423,6 +423,7 @@
       <button class="nav-item" id="tabOnboard">Onboarding</button>
       <button class="nav-item" id="tabOffboard">Offboarding</button>
       <button class="nav-item" id="tabMonitors">Monitors</button>
+      <button class="nav-item" id="tabOther">Other Equipment</button>
       <button class="nav-item" id="tabBulk">Bulk Stock</button>
     </div>
     <div class="nav-section">
@@ -602,6 +603,44 @@
       <div class="empty" id="monitorEmptyState" style="display:none;">
         <b>No monitors yet</b>
         Import the Tampa Office list or add one individually.
+      </div>
+    </div>
+  </div>
+
+  <div id="otherView" style="display:none;">
+    <p class="sub" style="margin:0 0 14px;">Equipment that doesn't fit Laptop Inventory, Active Laptops (NP), or Monitors — each typed category below gets its own tracked section automatically.</p>
+    <div id="otherCategoryTabs" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;"></div>
+    <div id="otherEmptyOverall" class="empty" style="display:none;">
+      <b>No other equipment yet</b>
+      Items typed as "Other" from the Scan tab (or added manually below) will show up here, grouped by category.
+    </div>
+    <div id="otherContent" style="display:none;">
+      <div class="stats" id="otherStats"></div>
+      <div class="toolbar">
+        <input type="text" id="otherSearch" placeholder="Search by name, ID, serial, or person...">
+        <select id="otherFilterStatus">
+          <option value="">All statuses</option>
+          <option value="available">Available</option>
+          <option value="provided">Provided</option>
+          <option value="retained">Retained</option>
+          <option value="damaged">Damaged</option>
+          <option value="decommissioned">Decommissioned</option>
+          <option value="nonfunctional">Non-functional</option>
+        </select>
+        <button class="btn btn-primary" id="btnAddOther">+ Add item</button>
+      </div>
+      <div class="table-card">
+        <table>
+          <thead>
+            <tr>
+              <th>Item</th><th>Category</th><th>Status</th><th>Assigned to</th><th>Location</th><th>Updated</th>
+            </tr>
+          </thead>
+          <tbody id="otherTbody"></tbody>
+        </table>
+        <div class="empty" id="otherEmptyState" style="display:none;">
+          <b>No items in this category yet</b>
+        </div>
       </div>
     </div>
   </div>
@@ -909,6 +948,78 @@
       <button class="btn btn-ghost btn-sm" id="btnDeleteNextPAsset" style="color:var(--nonfunc);border-color:var(--nonfunc-soft);">Delete this record</button>
       <span style="font-size:11.5px;color:var(--ink-faint);margin-left:8px;">Permanent — use for duplicates or entry mistakes, not for retiring working equipment.</span>
     </div>
+  </div>
+</div>
+
+<!-- ADD OTHER ITEM MODAL -->
+<div class="overlay" id="addOtherOverlay">
+  <div class="modal">
+    <button class="close-x" data-close="addOtherOverlay">&times;</button>
+    <h2>Add other equipment</h2>
+    <p class="modal-sub">Tracked individually by serial, same lifecycle as your other sections.</p>
+    <div class="row2">
+      <div class="field">
+        <label>Category / Type</label>
+        <input type="text" id="oth_category" placeholder="Docking Station, Webcam, Tablet...">
+      </div>
+      <div class="field">
+        <label>Serial</label>
+        <input type="text" id="oth_serial" placeholder="Optional">
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Starting status</label>
+        <select id="oth_status">
+          <option value="available">Available (in stock)</option>
+          <option value="provided">Provided (assigned)</option>
+          <option value="retained">Retained (storage)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Assigned to (if provided)</label>
+        <input type="text" id="oth_assigned" placeholder="Person name" list="employeeNamesList">
+      </div>
+    </div>
+    <div class="field">
+      <label>Location</label>
+      <input type="text" id="oth_location" placeholder="e.g. Tampa Office">
+    </div>
+    <div class="field">
+      <label>Notes</label>
+      <textarea id="oth_notes" placeholder="Optional"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" data-close="addOtherOverlay">Cancel</button>
+      <button class="btn btn-primary" id="btnSaveOther">Add item</button>
+    </div>
+  </div>
+</div>
+
+<!-- OTHER ITEM DETAIL MODAL -->
+<div class="overlay" id="otherDetailOverlay">
+  <div class="modal" style="max-width:640px;">
+    <button class="close-x" data-close="otherDetailOverlay">&times;</button>
+    <div class="detail-head">
+      <div>
+        <div class="eyebrow" id="oth_d_id"></div>
+        <h2 id="oth_d_name"></h2>
+      </div>
+      <span class="tag" id="oth_d_status"></span>
+    </div>
+    <div class="detail-meta">
+      <div><div class="k">Category</div><div class="v" id="oth_d_category"></div></div>
+      <div><div class="k">Serial</div><div class="v" id="oth_d_serial"></div></div>
+      <div><div class="k">Assigned to</div><div class="v" id="oth_d_assigned"></div></div>
+      <div><div class="k">Location</div><div class="v" id="oth_d_location"></div></div>
+    </div>
+
+    <div class="actions-title">Log activity</div>
+    <div class="action-row" id="oth_actionRow"></div>
+    <div id="oth_subFormZone"></div>
+
+    <div class="actions-title">History</div>
+    <div class="timeline" id="oth_timeline"></div>
   </div>
 </div>
 
@@ -1814,8 +1925,8 @@ document.getElementById('btnApplyTaskLog').onclick = applyTaskLog;
 
 /* ---- Tab switching ---- */
 function showTab(which){
-  const tabs = {overview:'tabOverview', scan:'tabScan', serial:'tabSerial', nextp:'tabNextP', onboard:'tabOnboard', offboard:'tabOffboard', monitors:'tabMonitors', bulk:'tabBulk'};
-  const views = {overview:'overviewView', scan:'scanView', serial:'serialView', nextp:'nextpView', onboard:'onboardView', offboard:'offboardView', monitors:'monitorView', bulk:'bulkView'};
+  const tabs = {overview:'tabOverview', scan:'tabScan', serial:'tabSerial', nextp:'tabNextP', onboard:'tabOnboard', offboard:'tabOffboard', monitors:'tabMonitors', other:'tabOther', bulk:'tabBulk'};
+  const views = {overview:'overviewView', scan:'scanView', serial:'serialView', nextp:'nextpView', onboard:'onboardView', offboard:'offboardView', monitors:'monitorView', other:'otherView', bulk:'bulkView'};
   const meta = {
     overview: {title:'Overview', desc:'Company-wide equipment totals across every section.'},
     scan: {title:'Scan', desc:'Scan a barcode to look up or add equipment by serial.'},
@@ -1824,6 +1935,7 @@ function showTab(which){
     onboard: {title:'Onboarding', desc:'Walk a new hire through identity, equipment, and access — step by step.'},
     offboard: {title:'Offboarding', desc:'Find a departing employee\u2019s laptop and work through the offboarding checklist.'},
     monitors: {title:'Monitors', desc:'Individually tracked by brand and serial, same lifecycle as your laptops.'},
+    other: {title:'Other Equipment', desc:'Anything outside the standard sections, grouped into its own space per category.'},
     bulk: {title:'Bulk Stock', desc:'Accessories tracked by quantity — mice, chargers, and other small equipment.'}
   };
   if(which !== 'scan') stopScan();
@@ -1835,6 +1947,7 @@ function showTab(which){
   document.getElementById('pageDesc').textContent = meta[which].desc;
   document.getElementById('crumbCurrent').textContent = meta[which].title;
   if(which === 'overview') renderOverview();
+  if(which === 'other') renderOther();
   closeMobileDrawer();
 }
 
@@ -1856,6 +1969,7 @@ document.getElementById('tabNextP').onclick = ()=> showTab('nextp');
 document.getElementById('tabOnboard').onclick = ()=> showTab('onboard');
 document.getElementById('tabOffboard').onclick = ()=> showTab('offboard');
 document.getElementById('tabMonitors').onclick = ()=> showTab('monitors');
+document.getElementById('tabOther').onclick = ()=> showTab('other');
 document.getElementById('tabBulk').onclick = ()=> showTab('bulk');
 document.getElementById('bulkSearch').addEventListener('input', renderBulkTable);
 document.getElementById('bulkFilterCategory').addEventListener('change', renderBulkTable);
@@ -1989,7 +2103,7 @@ function extractSerialCandidates(text){
 }
 
 function findAcrossLedger(candidates){
-  const stores = [['serial', assets], ['nextp', nextpAssets], ['monitors', monitorAssets]];
+  const stores = [['serial', assets], ['nextp', nextpAssets], ['monitors', monitorAssets], ['other', otherAssets]];
   for(const raw of candidates){
     const ns = normSerial(raw);
     if(!ns) continue;
@@ -2006,7 +2120,7 @@ function handleScannedSerial(rawText){
   const candidates = extractSerialCandidates(rawText);
   const match = findAcrossLedger(candidates);
 
-  const storeLabel = {serial:'Laptop Inventory', nextp:'Active Laptops (NP)', monitors:'Monitors'};
+  const storeLabel = {serial:'Laptop Inventory', nextp:'Active Laptops (NP)', monitors:'Monitors', other:'Other Equipment'};
 
   if(match){
     const { found, store, matchedOn } = match;
@@ -2025,7 +2139,8 @@ function handleScannedSerial(rawText){
     document.getElementById('btnScanJump').onclick = ()=>{
       if(store==='serial'){ showTab('serial'); openDetail(found.id); }
       else if(store==='nextp'){ showTab('nextp'); openNextPDetail(found.id); }
-      else { showTab('monitors'); openMonitorDetail(found.id); }
+      else if(store==='monitors'){ showTab('monitors'); openMonitorDetail(found.id); }
+      else { activeOtherCategory = found.category; showTab('other'); openOtherDetail(found.id); }
     };
   } else {
     // Best guess at the actual serial, so the pre-filled field isn't just the
@@ -2077,10 +2192,11 @@ function handleScannedSerial(rawText){
       } else {
         const typedCategory = document.getElementById('scanOtherType').value.trim();
         if(!typedCategory){ alert('Type a category for this item first.'); return; }
-        showTab('serial');
-        openOverlay('addOverlay');
-        document.getElementById('f_serial').value = serialToUse;
-        document.getElementById('f_category').value = typedCategory;
+        showTab('other');
+        activeOtherCategory = typedCategory;
+        document.getElementById('oth_category').value = typedCategory;
+        openOverlay('addOtherOverlay');
+        document.getElementById('oth_serial').value = serialToUse;
       }
     };
   }
@@ -2089,7 +2205,7 @@ function handleScannedSerial(rawText){
 
 function renderOverview(){
   const bulkUnitTotal = bulkItems.reduce((sum,it)=> sum + bulkTotal(it) + (it.buckets.decommissioned||0), 0);
-  const grandTotal = assets.length + nextpAssets.length + monitorAssets.length + bulkUnitTotal;
+  const grandTotal = assets.length + nextpAssets.length + monitorAssets.length + otherAssets.length + bulkUnitTotal;
   document.getElementById('ov_grandTotal').textContent = grandTotal;
 
   const sectionEl = document.getElementById('ov_sectionStats');
@@ -2097,11 +2213,12 @@ function renderOverview(){
     <div class="stat" style="--dot:${STATUS_DOT.available};cursor:pointer;" onclick="showTab('serial')"><span class="n">${assets.length}</span><span class="l">Laptop Inventory</span></div>
     <div class="stat" style="--dot:${STATUS_DOT.provided};cursor:pointer;" onclick="showTab('nextp')"><span class="n">${nextpAssets.length}</span><span class="l">Active Laptops (NP)</span></div>
     <div class="stat" style="--dot:${STATUS_DOT.retained};cursor:pointer;" onclick="showTab('monitors')"><span class="n">${monitorAssets.length}</span><span class="l">Monitors</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.nonfunctional};cursor:pointer;" onclick="showTab('other')"><span class="n">${otherAssets.length}</span><span class="l">Other Equipment</span></div>
     <div class="stat" style="--dot:${STATUS_DOT.damaged};cursor:pointer;" onclick="showTab('bulk')"><span class="n">${bulkUnitTotal}</span><span class="l">Bulk Stock (units)</span></div>
   `;
 
   const combined = {available:0,provided:0,retained:0,damaged:0,decommissioned:0,nonfunctional:0};
-  [assets, nextpAssets, monitorAssets].forEach(list=>{
+  [assets, nextpAssets, monitorAssets, otherAssets].forEach(list=>{
     list.forEach(a=>{ if(combined[a.status]!==undefined) combined[a.status]++; });
   });
   const statusEl = document.getElementById('ov_statusStats');
@@ -2629,6 +2746,265 @@ async function assignOnboardEquipment(){
   addCaseHistory(c, 'Equipment assigned', `${asset.name} (${asset.serial}) — moved to Active Laptops (NP)`);
   await saveOnboardingCases();
   renderOnboardCase();
+}
+
+/* ---- Other Equipment (dynamic category sections) ---- */
+let otherAssets = [];
+let activeOtherId = null;
+let pendingOtherAction = null;
+let activeOtherCategory = null;
+
+function othUid(){ return 'OTH-' + String(Math.floor(1000+Math.random()*9000)); }
+
+async function loadOtherAssets(){
+  try{
+    const res = await window.storage.get('otherAssets', true);
+    otherAssets = res ? JSON.parse(res.value) : [];
+  }catch(e){
+    otherAssets = [];
+  }
+  renderOther();
+}
+
+async function saveOtherAssets(){
+  try{
+    await window.storage.set('otherAssets', JSON.stringify(otherAssets), true);
+  }catch(e){
+    console.error('Save failed', e);
+  }
+}
+
+function otherCategories(){
+  return [...new Set(otherAssets.map(a=>a.category).filter(Boolean))].sort();
+}
+
+function renderOther(){
+  const cats = otherCategories();
+  if(activeOtherCategory && !cats.includes(activeOtherCategory)) activeOtherCategory = null;
+  if(!activeOtherCategory && cats.length) activeOtherCategory = cats[0];
+
+  const tabsEl = document.getElementById('otherCategoryTabs');
+  tabsEl.innerHTML = cats.map(c=>{
+    const count = otherAssets.filter(a=>a.category===c).length;
+    const active = c === activeOtherCategory;
+    return `<button class="btn btn-sm ${active?'btn-primary':'btn-ghost'}" data-cat="${escapeHtml(c)}">${escapeHtml(c)} (${count})</button>`;
+  }).join('');
+  tabsEl.querySelectorAll('button[data-cat]').forEach(btn=>{
+    btn.onclick = ()=>{ activeOtherCategory = btn.dataset.cat; renderOther(); };
+  });
+
+  const hasAny = otherAssets.length > 0;
+  document.getElementById('otherEmptyOverall').style.display = hasAny ? 'none' : 'block';
+  document.getElementById('otherContent').style.display = hasAny ? 'block' : 'none';
+  if(!hasAny) return;
+
+  renderOtherStats();
+  renderOtherTable();
+  populateEmployeeDatalist();
+}
+
+function renderOtherStats(){
+  const counts = {available:0,provided:0,retained:0,damaged:0,decommissioned:0,nonfunctional:0};
+  otherAssets.filter(a=>a.category===activeOtherCategory).forEach(a=>{ if(counts[a.status]!==undefined) counts[a.status]++; });
+  const total = otherAssets.filter(a=>a.category===activeOtherCategory).length;
+  const el = document.getElementById('otherStats');
+  el.innerHTML = `
+    <div class="stat" style="--dot:var(--ink)"><span class="n">${total}</span><span class="l">Total — ${escapeHtml(activeOtherCategory||'')}</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.available}"><span class="n">${counts.available}</span><span class="l">Available</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.provided}"><span class="n">${counts.provided}</span><span class="l">Provided</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.retained}"><span class="n">${counts.retained}</span><span class="l">Retained</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.damaged}"><span class="n">${counts.damaged}</span><span class="l">Damaged</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.decommissioned}"><span class="n">${counts.decommissioned}</span><span class="l">Decommissioned</span></div>
+    <div class="stat" style="--dot:${STATUS_DOT.nonfunctional}"><span class="n">${counts.nonfunctional}</span><span class="l">Non-functional</span></div>
+  `;
+}
+
+function renderOtherTable(){
+  const search = document.getElementById('otherSearch').value.toLowerCase();
+  const fStatus = document.getElementById('otherFilterStatus').value;
+
+  let list = otherAssets.filter(a=>{
+    if(a.category !== activeOtherCategory) return false;
+    if(fStatus && a.status !== fStatus) return false;
+    if(search){
+      const hay = [a.name,a.id,a.serial,a.assigned,a.location].join(' ').toLowerCase();
+      if(!hay.includes(search)) return false;
+    }
+    return true;
+  }).sort((a,b)=> (b.updated||'').localeCompare(a.updated||''));
+
+  const tbody = document.getElementById('otherTbody');
+  const emptyState = document.getElementById('otherEmptyState');
+  if(list.length===0){
+    tbody.innerHTML='';
+    emptyState.style.display='block';
+    return;
+  }
+  emptyState.style.display='none';
+
+  tbody.innerHTML = list.map(a=>`
+    <tr onclick="openOtherDetail('${a.id}')">
+      <td data-label="Item">
+        <div class="asset-name">${escapeHtml(a.name)}</div>
+        <div class="asset-id">${a.id}${a.serial ? ' · <span class=\"asset-serial\">'+escapeHtml(a.serial)+'</span>' : ''}</div>
+      </td>
+      <td data-label="Category">${escapeHtml(a.category||'—')}</td>
+      <td data-label="Status"><span class="tag ${a.status}">${STATUS_LABEL[a.status]}</span></td>
+      <td data-label="Assigned to">${escapeHtml(a.assigned||'—')}</td>
+      <td data-label="Location">${escapeHtml(a.location||'—')}</td>
+      <td data-label="Updated">${a.updated ? fmtDate(a.updated) : '—'}</td>
+    </tr>
+  `).join('');
+}
+
+document.getElementById('otherSearch').addEventListener('input', renderOtherTable);
+document.getElementById('otherFilterStatus').addEventListener('change', renderOtherTable);
+
+/* ---- Add other item ---- */
+document.getElementById('btnAddOther').onclick = ()=>{
+  document.getElementById('oth_category').value = activeOtherCategory || '';
+  openOverlay('addOtherOverlay');
+};
+
+document.getElementById('btnSaveOther').onclick = async ()=>{
+  const category = document.getElementById('oth_category').value.trim();
+  if(!category){ alert('Give this item a category/type first.'); return; }
+  const status = document.getElementById('oth_status').value;
+  const asset = {
+    id: othUid(),
+    name: category + ' — ' + (status==='provided' ? (document.getElementById('oth_assigned').value.trim() || 'Unassigned') : 'Unassigned'),
+    category,
+    serial: document.getElementById('oth_serial').value.trim(),
+    status,
+    assigned: status==='provided' ? document.getElementById('oth_assigned').value.trim() : '',
+    location: document.getElementById('oth_location').value.trim(),
+    history: [],
+    updated: today()
+  };
+  const note = document.getElementById('oth_notes').value.trim();
+  addHistory(asset, 'Added to ledger', note);
+  otherAssets.push(asset);
+  await saveOtherAssets();
+  activeOtherCategory = category;
+  renderOther();
+  closeOverlay('addOtherOverlay');
+  ['oth_category','oth_serial','oth_assigned','oth_location','oth_notes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('oth_status').value='available';
+};
+
+/* ---- Other item detail / lifecycle actions ---- */
+function openOtherDetail(id){
+  activeOtherId = id;
+  const a = otherAssets.find(x=>x.id===id);
+  if(!a) return;
+  document.getElementById('oth_d_id').textContent = a.id;
+  document.getElementById('oth_d_name').textContent = a.name;
+  const statusEl = document.getElementById('oth_d_status');
+  statusEl.className = 'tag ' + a.status;
+  statusEl.textContent = STATUS_LABEL[a.status];
+  document.getElementById('oth_d_category').textContent = a.category || '—';
+  document.getElementById('oth_d_serial').textContent = a.serial || '—';
+  document.getElementById('oth_d_assigned').textContent = a.assigned || '—';
+  document.getElementById('oth_d_location').textContent = a.location || '—';
+
+  renderOtherActionRow(a);
+  document.getElementById('oth_subFormZone').innerHTML = '';
+  renderOtherTimeline(a);
+  openOverlay('otherDetailOverlay');
+}
+
+function renderOtherActionRow(a){
+  const row = document.getElementById('oth_actionRow');
+  const buttons = getMonitorActionButtons(a.status); // same generic serialized-item lifecycle
+  row.innerHTML = buttons.map(b=>`<button class="btn btn-sm ${b.cls}" data-action="${b.action}">${b.label}</button>`).join('') ||
+    '<span style="font-size:12.5px;color:var(--ink-faint);">Non-functional — retired for good, no further actions.</span>';
+  row.querySelectorAll('button[data-action]').forEach(btn=>{
+    btn.onclick = ()=> showOtherSubForm(btn.dataset.action);
+  });
+}
+
+function showOtherSubForm(action){
+  pendingOtherAction = action;
+  const zone = document.getElementById('oth_subFormZone');
+  const needsPerson = action==='provide' || action==='transfer';
+  zone.innerHTML = `
+    <div class="sub-form">
+      ${needsPerson ? `<div class="field"><label>${action==='transfer'?'New assignee':'Assign to'}</label><input type="text" id="oth_sf_person" placeholder="Person name" list="employeeNamesList"></div>` : ''}
+      <div class="field"><label>Notes</label><textarea id="oth_sf_notes" placeholder="Optional detail for the log"></textarea></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost btn-sm" id="oth_sf_cancel">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="oth_sf_confirm">Confirm</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('oth_sf_cancel').onclick = ()=>{ zone.innerHTML=''; pendingOtherAction=null; };
+  document.getElementById('oth_sf_confirm').onclick = confirmOtherAction;
+}
+
+async function confirmOtherAction(){
+  const a = otherAssets.find(x=>x.id===activeOtherId);
+  if(!a) return;
+  const notesEl = document.getElementById('oth_sf_notes');
+  const notes = notesEl ? notesEl.value.trim() : '';
+  const personEl = document.getElementById('oth_sf_person');
+  const person = personEl ? personEl.value.trim() : '';
+
+  switch(pendingOtherAction){
+    case 'provide':
+      a.status='provided'; a.assigned = person || a.assigned || 'Unassigned';
+      addHistory(a,'Provided', person ? `Assigned to ${person}` : notes);
+      break;
+    case 'collect':
+      addHistory(a,'Collected', `Returned from ${a.assigned || 'assignee'}${notes ? ' — '+notes : ''}`);
+      a.status='available'; a.assigned='';
+      break;
+    case 'transfer':
+      const prev = a.assigned || 'previous holder';
+      a.assigned = person || a.assigned;
+      addHistory(a,'Transferred', `From ${prev} to ${a.assigned}${notes ? ' — '+notes : ''}`);
+      break;
+    case 'retain':
+      a.status='retained';
+      addHistory(a,'Retained', notes || 'Moved to storage');
+      break;
+    case 'damage':
+      a.status='damaged';
+      addHistory(a,'Marked damaged', notes || 'No detail provided');
+      break;
+    case 'repair':
+      a.status='available';
+      addHistory(a,'Marked repaired', notes || 'Returned to available pool');
+      break;
+    case 'decommission':
+      a.status='decommissioned'; a.assigned='';
+      addHistory(a,'Decommissioned', notes || 'Returned to pool, ready to reissue');
+      break;
+    case 'nonfunctional':
+      a.status='nonfunctional'; a.assigned='';
+      addHistory(a,'Marked non-functional', notes || 'Beyond repair — retired for good');
+      break;
+  }
+  await saveOtherAssets();
+  document.getElementById('oth_subFormZone').innerHTML='';
+  pendingOtherAction=null;
+  openOtherDetail(a.id);
+  renderOther();
+}
+
+function renderOtherTimeline(a){
+  const el = document.getElementById('oth_timeline');
+  const hist = a.history || [];
+  if(hist.length===0){ el.innerHTML = '<div style="color:var(--ink-faint);font-size:12.5px;">No activity logged yet.</div>'; return; }
+  el.innerHTML = hist.map(h=>`
+    <div class="tl-item">
+      <div class="tl-dot"></div>
+      <div class="tl-body">
+        <b>${escapeHtml(h.action)}</b>
+        <div class="tl-meta">${fmtDate(h.date)}</div>
+        ${h.detail ? `<div class="tl-note">${escapeHtml(h.detail)}</div>` : ''}
+      </div>
+    </div>
+  `).join('');
 }
 
 /* ---- Offboarding ---- */
@@ -3855,7 +4231,7 @@ document.getElementById('filterCategory').addEventListener('change', renderTable
 document.getElementById('btnExportData').onclick = ()=>{
   const backup = {
     exportedAt: new Date().toISOString(),
-    assets, nextpAssets, monitorAssets, bulkItems, onboardingCases
+    assets, nextpAssets, monitorAssets, otherAssets, bulkItems, onboardingCases
   };
   const blob = new Blob([JSON.stringify(backup, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
@@ -3878,21 +4254,24 @@ document.getElementById('importDataFile').addEventListener('change', async (e)=>
   try{
     const text = await file.text();
     const data = JSON.parse(text);
-    const summary = `This backup has:\n- ${(data.assets||[]).length} Laptop Inventory\n- ${(data.nextpAssets||[]).length} Active Laptops (NP)\n- ${(data.monitorAssets||[]).length} Monitors\n- ${(data.bulkItems||[]).length} Bulk Stock item types\n- ${(data.onboardingCases||[]).length} Onboarding case(s)\n\nImporting will REPLACE everything currently in this ledger. Continue?`;
+    const summary = `This backup has:\n- ${(data.assets||[]).length} Laptop Inventory\n- ${(data.nextpAssets||[]).length} Active Laptops (NP)\n- ${(data.monitorAssets||[]).length} Monitors\n- ${(data.otherAssets||[]).length} Other Equipment\n- ${(data.bulkItems||[]).length} Bulk Stock item types\n- ${(data.onboardingCases||[]).length} Onboarding case(s)\n\nImporting will REPLACE everything currently in this ledger. Continue?`;
     if(!confirm(summary)){ e.target.value=''; return; }
     assets = data.assets || [];
     nextpAssets = data.nextpAssets || [];
     monitorAssets = data.monitorAssets || [];
+    otherAssets = data.otherAssets || [];
     bulkItems = data.bulkItems || [];
     onboardingCases = data.onboardingCases || [];
     await saveAssets();
     await saveNextPAssets();
     await saveMonitorAssets();
+    await saveOtherAssets();
     await saveBulkItems();
     await saveOnboardingCases();
     render();
     renderNextP();
     renderMonitors();
+    renderOther();
     renderBulk();
     alert('Backup restored.');
   }catch(err){
@@ -3905,6 +4284,7 @@ document.getElementById('importDataFile').addEventListener('change', async (e)=>
   await loadAssets();
   await loadNextPAssets();
   await loadMonitorAssets();
+  await loadOtherAssets();
   await loadBulkItems();
   await loadOnboardingCases();
 
