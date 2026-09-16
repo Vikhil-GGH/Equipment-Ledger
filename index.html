@@ -3532,11 +3532,15 @@ async function saveNextPAssets(){
   }
 }
 
-// One-time cleanup: any laptop in Laptop Inventory that's already Provided (assigned)
+const LAPTOP_CATEGORIES = ['Dell Laptop','HP','Lenovo','Macbook','Microsoft Surface'];
+
+// One-time cleanup: any LAPTOP in Laptop Inventory that's already Provided (assigned)
 // belongs in Active Laptops (NP) under the current rule — assigning a laptop always
 // moves it there. Catch any laptops assigned before that rule was made automatic.
+// Scoped to laptop categories only — non-laptop items (mice, docking stations, etc.)
+// belong in Other Equipment instead, handled by fixMisplacedOtherCategoryItems().
 async function fixStuckProvidedInInventory(){
-  const stuck = assets.filter(a => a.status === 'provided');
+  const stuck = assets.filter(a => a.status === 'provided' && LAPTOP_CATEGORIES.includes(a.category));
   if(stuck.length === 0) return;
   for(const a of stuck){
     assets = assets.filter(x=>x.id !== a.id);
@@ -3547,6 +3551,36 @@ async function fixStuckProvidedInInventory(){
   await saveAssets();
   await saveNextPAssets();
   render();
+}
+
+// One-time cleanup: non-laptop items (mice, docking stations, webcams, etc.) that
+// ended up in Laptop Inventory or Active Laptops (NP) — e.g. swept there by the
+// laptop-focused cleanup above before it was scoped to laptop categories — belong
+// in Other Equipment instead, grouped under their own category automatically.
+async function fixMisplacedOtherCategoryItems(){
+  let assetsChanged = false, nextpChanged = false, otherChanged = false;
+
+  const strayInAssets = assets.filter(a => a.category && !LAPTOP_CATEGORIES.includes(a.category));
+  for(const a of strayInAssets){
+    assets = assets.filter(x=>x.id !== a.id);
+    addHistory(a, 'Moved to Other Equipment', `Data cleanup — "${a.category}" isn't a laptop category, moved out of Laptop Inventory`);
+    otherAssets.push(a);
+    assetsChanged = true; otherChanged = true;
+  }
+
+  const strayInNP = nextpAssets.filter(a => a.category && !LAPTOP_CATEGORIES.includes(a.category));
+  for(const a of strayInNP){
+    nextpAssets = nextpAssets.filter(x=>x.id !== a.id);
+    addHistory(a, 'Moved to Other Equipment', `Data cleanup — "${a.category}" isn't a laptop category, moved out of Active Laptops (NP)`);
+    otherAssets.push(a);
+    nextpChanged = true; otherChanged = true;
+  }
+
+  if(assetsChanged) await saveAssets();
+  if(nextpChanged) await saveNextPAssets();
+  if(otherChanged) await saveOtherAssets();
+  if(assetsChanged) render();
+  if(nextpChanged) renderNextP();
 }
 
 // One-time cleanup: earlier versions of this ledger could leave a laptop sitting in
@@ -4285,6 +4319,7 @@ document.getElementById('importDataFile').addEventListener('change', async (e)=>
   await loadNextPAssets();
   await loadMonitorAssets();
   await loadOtherAssets();
+  await fixMisplacedOtherCategoryItems();
   await loadBulkItems();
   await loadOnboardingCases();
 
