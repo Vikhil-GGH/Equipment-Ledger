@@ -1950,21 +1950,71 @@ async function onScanSuccess(decodedText){
   handleScannedSerial(decodedText);
 }
 
-function handleScannedSerial(rawText){
-  const ns = normSerial(rawText);
-  const el = document.getElementById('scanResult');
+// Some tags/QR codes encode more than a bare serial — a URL with a query
+// param, a JSON payload, or several fields separated by delimiters. Pull out
+// every plausible candidate so a real match still gets found even if the
+// decoded text isn't literally just the serial by itself.
+function extractSerialCandidates(text){
+  const candidates = [text];
+  const trimmed = text.trim();
 
-  let found = assets.find(a => normSerial(a.serial) === ns);
-  let store = 'serial';
-  if(!found){ found = nextpAssets.find(a => normSerial(a.serial) === ns); store = 'nextp'; }
-  if(!found){ found = monitorAssets.find(a => normSerial(a.serial) === ns); store = 'monitors'; }
+  // URL query params / last path segment (e.g. dell.com/support?sn=ABC123)
+  try{
+    const url = new URL(trimmed);
+    for(const [key, val] of url.searchParams.entries()){
+      if(/serial|sn|tag|asset/i.test(key) && val) candidates.push(val);
+    }
+    const segments = url.pathname.split('/').filter(Boolean);
+    if(segments.length) candidates.push(segments[segments.length-1]);
+  }catch(e){ /* not a URL, ignore */ }
+
+  // JSON payloads with a serial-like field
+  try{
+    const obj = JSON.parse(trimmed);
+    if(obj && typeof obj === 'object'){
+      for(const key of Object.keys(obj)){
+        if(/serial|sn|tag|asset/i.test(key) && obj[key]) candidates.push(String(obj[key]));
+      }
+    }
+  }catch(e){ /* not JSON, ignore */ }
+
+  // Common "SN:" / "S/N:" / "Serial:" / "Tag:" prefixes
+  const prefixMatch = trimmed.match(/(?:s\/?n|serial(?:\s*no)?|tag|asset\s*tag)\s*[:#-]?\s*([A-Za-z0-9-]+)/i);
+  if(prefixMatch) candidates.push(prefixMatch[1]);
+
+  // Delimited multi-field strings (comma, pipe, semicolon, whitespace, newline)
+  trimmed.split(/[\s,;|]+/).forEach(tok=>{ if(tok) candidates.push(tok); });
+
+  return [...new Set(candidates.filter(Boolean))];
+}
+
+function findAcrossLedger(candidates){
+  const stores = [['serial', assets], ['nextp', nextpAssets], ['monitors', monitorAssets]];
+  for(const raw of candidates){
+    const ns = normSerial(raw);
+    if(!ns) continue;
+    for(const [store, list] of stores){
+      const hit = list.find(a => normSerial(a.serial) === ns);
+      if(hit) return { found: hit, store, matchedOn: raw };
+    }
+  }
+  return null;
+}
+
+function handleScannedSerial(rawText){
+  const el = document.getElementById('scanResult');
+  const candidates = extractSerialCandidates(rawText);
+  const match = findAcrossLedger(candidates);
 
   const storeLabel = {serial:'Laptop Inventory', nextp:'Active Laptops (NP)', monitors:'Monitors'};
 
-  if(found){
+  if(match){
+    const { found, store, matchedOn } = match;
+    const matchNote = matchedOn !== rawText ? `<div style="font-size:11.5px;color:var(--ink-faint);margin-bottom:6px;">Matched on extracted value: <b>${escapeHtml(matchedOn)}</b></div>` : '';
     el.innerHTML = `
       <div class="table-card" style="padding:16px;">
-        <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:10px;">Scanned <b>${escapeHtml(rawText)}</b> — found in <b>${storeLabel[store]}</b></div>
+        <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:6px;">Scanned <b>${escapeHtml(rawText)}</b> — found in <b>${storeLabel[store]}</b></div>
+        ${matchNote}
         <div class="asset-name" style="margin-bottom:4px;">${escapeHtml(found.name)}</div>
         <span class="tag ${found.status}">${store==='nextp' ? NP_STATUS_LABEL[found.status] : STATUS_LABEL[found.status]}</span>
         <div class="modal-actions" style="justify-content:flex-start;margin-top:14px;">
@@ -1978,9 +2028,16 @@ function handleScannedSerial(rawText){
       else { showTab('monitors'); openMonitorDetail(found.id); }
     };
   } else {
+    // Best guess at the actual serial, so the pre-filled field isn't just the
+    // full raw payload (a URL or JSON blob) if we can do better.
+    const bestGuess = candidates.find(c => c !== rawText && /^[A-Za-z0-9-]{4,}$/.test(c)) || rawText;
     el.innerHTML = `
       <div class="table-card" style="padding:16px;">
         <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:10px;">Scanned <b>${escapeHtml(rawText)}</b> — not found in any section.</div>
+        <div class="field">
+          <label>Serial / tag to use</label>
+          <input type="text" id="scanExtractedSerial" value="${escapeHtml(bestGuess)}">
+        </div>
         <div class="field">
           <label>Select category</label>
           <select id="scanCategorySelect">
@@ -1996,18 +2053,19 @@ function handleScannedSerial(rawText){
     `;
     document.getElementById('btnScanAddNew').onclick = ()=>{
       const choice = document.getElementById('scanCategorySelect').value;
+      const serialToUse = document.getElementById('scanExtractedSerial').value.trim();
       if(choice === 'serial'){
         showTab('serial');
         openOverlay('addOverlay');
-        document.getElementById('f_serial').value = rawText;
+        document.getElementById('f_serial').value = serialToUse;
       } else if(choice === 'nextp'){
         showTab('nextp');
         openOverlay('addNextPOverlay');
-        document.getElementById('np_serial').value = rawText;
+        document.getElementById('np_serial').value = serialToUse;
       } else {
         showTab('monitors');
         openOverlay('addMonitorOverlay');
-        document.getElementById('mon_serial').value = rawText;
+        document.getElementById('mon_serial').value = serialToUse;
       }
     };
   }
