@@ -2044,13 +2044,21 @@ function handleScannedSerial(rawText){
             <option value="serial">Laptop Inventory</option>
             <option value="nextp">Active Laptops (NP)</option>
             <option value="monitors">Monitor</option>
+            <option value="other">Other</option>
           </select>
+        </div>
+        <div class="field" id="scanOtherTypeField" style="display:none;">
+          <label>Type</label>
+          <input type="text" id="scanOtherType" placeholder="e.g. Docking Station, Webcam, Tablet...">
         </div>
         <div class="modal-actions" style="justify-content:flex-start;margin-top:10px;">
           <button class="btn btn-primary btn-sm" id="btnScanAddNew">Add to selected section</button>
         </div>
       </div>
     `;
+    document.getElementById('scanCategorySelect').addEventListener('change', (e)=>{
+      document.getElementById('scanOtherTypeField').style.display = (e.target.value === 'other') ? 'block' : 'none';
+    });
     document.getElementById('btnScanAddNew').onclick = ()=>{
       const choice = document.getElementById('scanCategorySelect').value;
       const serialToUse = document.getElementById('scanExtractedSerial').value.trim();
@@ -2062,10 +2070,17 @@ function handleScannedSerial(rawText){
         showTab('nextp');
         openOverlay('addNextPOverlay');
         document.getElementById('np_serial').value = serialToUse;
-      } else {
+      } else if(choice === 'monitors'){
         showTab('monitors');
         openOverlay('addMonitorOverlay');
         document.getElementById('mon_serial').value = serialToUse;
+      } else {
+        const typedCategory = document.getElementById('scanOtherType').value.trim();
+        if(!typedCategory){ alert('Type a category for this item first.'); return; }
+        showTab('serial');
+        openOverlay('addOverlay');
+        document.getElementById('f_serial').value = serialToUse;
+        document.getElementById('f_category').value = typedCategory;
       }
     };
   }
