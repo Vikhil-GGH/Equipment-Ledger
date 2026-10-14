@@ -16,6 +16,7 @@ dist-ssr
 .env
 .env.*
 !.env.example
+!.env.staging.example
 
 # Test coverage
 coverage
@@ -34,3 +35,6 @@ supabase/.temp
 *.njsproj
 *.sln
 *.sw?
+
+# Staging test state (session tokens, reports) — never commit
+.staging-state/

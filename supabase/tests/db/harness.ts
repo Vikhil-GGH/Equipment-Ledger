@@ -30,8 +30,21 @@ export const isStaging = !!process.env.STAGING_DB_URL
 
 export async function openDb(): Promise<Db> {
   if (isStaging) {
-    const { Client } = await import('pg')
-    const client = new Client({ connectionString: process.env.STAGING_DB_URL })
+    const { default: pg } = await import('pg')
+    const { Client } = pg
+    // Started via scripts/staging/run-db-tests.mjs, which has already
+    // refused to run against production. Same TLS rules as lib.mjs.
+    const url = process.env.STAGING_DB_URL!
+    const caPath = process.env.STAGING_DB_SSL_CA
+    const local = /@(localhost|127\.0\.0\.1)[:/]/.test(url)
+    const client = new Client({
+      connectionString: url.replace(/[?&]sslmode=[^&]*/, ''),
+      ssl: local
+        ? false
+        : caPath
+          ? { ca: readFileSync(caPath, 'utf8'), rejectUnauthorized: true }
+          : { rejectUnauthorized: false },
+    })
     await client.connect()
     return {
       exec: async (sql) => {
@@ -80,6 +93,11 @@ export async function applyMigration(db: Db, file: string, prelude = ''): Promis
     await db.exec('rollback')
     throw err
   }
+}
+
+/** SQL from supabase/adaptations/ (known migration-file failures). */
+export function readAdaptation(file: string): string {
+  return readFileSync(join(__dirname, '..', '..', 'adaptations', file), 'utf8')
 }
 
 export async function applyRollback(db: Db, file: string): Promise<void> {

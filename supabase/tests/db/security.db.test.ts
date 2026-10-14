@@ -25,6 +25,7 @@ import {
   isStaging,
   loadSupabaseStub,
   migrationFiles,
+  readAdaptation,
   openDb,
   tableHash,
   tryQuery,
@@ -54,38 +55,12 @@ const SECURITY_MIGRATIONS = [
   '20260901000023_remove_raw_ledger_writes.sql',
 ]
 
-// 021 changes two functions' return types with CREATE OR REPLACE, which
-// Postgres rejects (audit finding C3). However it reached the hosted
-// project, the resulting state is "021's definitions are live", so the
-// baseline reproduces that by dropping the two functions first.
-const C3_WORKAROUND = `
-  drop function perform_lifecycle_action(asset_collection, uuid, asset_action, text, text);
-  drop function perform_swap(asset_collection, uuid, uuid, text);
-`
-
-// 017 as written can't insert a profile (text vs user_role, see
-// 20260901000022_down.sql), so no user can be created at all. Anonymous
-// users evidently were created in the hosted project, so the baseline uses
-// the working form of 017's function — identical except for the cast.
-const WORKING_017_HANDLE_NEW_USER = `
-create or replace function handle_new_user()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  insert into profiles (id, email, full_name, role)
-  values (
-    new.id,
-    coalesce(new.email, 'anonymous-' || new.id::text),
-    new.raw_user_meta_data ->> 'full_name',
-    (case when new.is_anonymous then 'editor' else 'viewer' end)::user_role
-  );
-  return new;
-end;
-$$;
-`
+// Known failures in the migration files, worked around exactly as the
+// staging rebuild does (supabase/adaptations/): 021 changes two return
+// types with CREATE OR REPLACE (audit C3), and 017 cannot insert a profile
+// (text vs user_role) so no user can be created at all.
+const C3_WORKAROUND = readAdaptation('021_before_drop_changed_functions.sql')
+const WORKING_017_HANDLE_NEW_USER = readAdaptation('017_after_role_cast.sql')
 
 let db: Db
 let baselineIds: LedgerIds
