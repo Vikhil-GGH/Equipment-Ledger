@@ -33,20 +33,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     supabase.auth.getSession().then(async ({ data }) => {
       if (cancelled) return
-      let session = data.session
-      // Temporary public-demo mode: nobody has to sign in to open the app,
-      // so give anyone without a session an anonymous one automatically
-      // (see 20260901000017_anonymous_public_demo.sql for the matching role
-      // grant). Real sign-in still works and simply replaces this session.
-      if (!session) {
-        const { data: anon, error } = await supabase.auth.signInAnonymously()
-        if (cancelled) return
-        if (error) {
-          setLoading(false)
-          return
-        }
-        session = anon.session
-      }
+      const session = data.session
+      // No session means signed out — RequireAuth sends the user to /login.
+      // Never sign in anonymously: anonymous sessions have no access (see
+      // 20260901000022_close_anonymous_access.sql).
       setSession(session)
       setUser(session?.user ?? null)
       if (session?.user) {
