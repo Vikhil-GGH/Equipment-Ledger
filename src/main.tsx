@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { registerSW } from 'virtual:pwa-register'
 import { AuthProvider } from './features/auth/AuthProvider'
 import { App } from './App'
+import { StagingBanner } from './app/StagingBanner'
 import './index.css'
 
 // autoUpdate: a new service worker activates and takes over silently on the
@@ -29,6 +30,7 @@ createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
+          <StagingBanner />
           <App />
         </AuthProvider>
       </BrowserRouter>

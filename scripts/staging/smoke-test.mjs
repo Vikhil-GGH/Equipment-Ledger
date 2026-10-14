@@ -51,7 +51,7 @@ function record(status, area, check, detail = '') {
   results.push({ status, area, check, detail: String(detail).slice(0, 160) })
 }
 const newClient = () =>
-  createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, {
+  createClient(env.VITE_STAGING_SUPABASE_URL, env.VITE_STAGING_SUPABASE_ANON_KEY, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   })
 

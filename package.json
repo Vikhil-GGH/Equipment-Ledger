@@ -17,7 +17,10 @@
     "staging:smoke": "node scripts/staging/smoke-test.mjs",
     "staging:test-db": "node scripts/staging/run-db-tests.mjs",
     "staging:compare": "node scripts/staging/compare-fingerprints.mjs",
-    "dev:staging": "vite --mode staging"
+    "dev:staging": "vite --mode staging",
+    "staging:set-role": "node scripts/staging/set-role.mjs",
+    "staging:reset": "node scripts/staging/reset.mjs",
+    "staging:test-files": "node scripts/staging/make-test-files.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",
@@ -44,6 +47,7 @@
     "jsdom": "^30.0.1",
     "oxlint": "^1.79.0",
     "pg": "8.13.1",
+    "qrcode": "1.5.4",
     "supabase": "^2.116.0",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",

@@ -1,13 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from '../types/database.types'
+import { resolveSupabaseConfig } from './supabaseConfig'
 
-const url = import.meta.env.VITE_SUPABASE_URL
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+// Staging mode reads only the VITE_STAGING_* settings and refuses to start
+// if they point at production — see supabaseConfig.ts and vite.config.ts.
+export const supabaseConfig = resolveSupabaseConfig(import.meta.env, __PROD_PROJECT_REF__)
 
-if (!url || !anonKey) {
-  throw new Error(
-    'Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. Copy .env.example to .env and fill in your Supabase project values.',
-  )
-}
-
-export const supabase = createClient<Database>(url, anonKey)
+export const supabase = createClient<Database>(supabaseConfig.url, supabaseConfig.anonKey)

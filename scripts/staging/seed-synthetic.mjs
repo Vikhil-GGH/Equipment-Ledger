@@ -10,10 +10,14 @@
 // investigation.
 //
 //   npm run staging:seed
+//   npm run staging:seed -- --large   also adds 1,120 extra history rows
+//                                     (to see the backup export's 1,000-row
+//                                     limit, audit finding C5, in the app)
 //
 // Refuses to run against production (see lib.mjs).
 import { connectStagingDb, loadStagingEnv } from './lib.mjs'
 
+const large = process.argv.includes('--large')
 const env = loadStagingEnv(['STAGING_DB_URL', 'STAGING_ADMIN_EMAIL'])
 const db = await connectStagingDb(env)
 let exitCode = 0
@@ -122,6 +126,25 @@ try {
   for (const n of [1, 2]) {
     await one(`insert into offboarding_checklists (employee_name, created_by) values ($1, $2) returning id`, [employee(n), admin.id])
     bump('offboarding checklists')
+  }
+
+  if (large) {
+    // 4 laptops x 140 damage/repair cycles = 1,120 history rows, run
+    // server-side in one statement (still as the admin, still through the
+    // lifecycle function). They end up Available again.
+    await db.query(
+      `do $$
+       declare v_id uuid;
+       begin
+         for v_id in select id from serialized_assets where serial in ('SYN-INV-022','SYN-INV-023','SYN-INV-024','SYN-INV-025') loop
+           for i in 1..140 loop
+             perform perform_lifecycle_action('serialized_assets', v_id, 'mark_damaged', null, 'synthetic volume');
+             perform perform_lifecycle_action('serialized_assets', v_id, 'mark_repaired', null, 'synthetic volume');
+           end loop;
+         end loop;
+       end $$`,
+    )
+    counts['extra history rows (--large)'] = 1120
   }
 
   // Deliberate duplicate patterns (for the later duplicate investigation).

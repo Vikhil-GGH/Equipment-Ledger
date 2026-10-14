@@ -44,14 +44,14 @@ export function loadStagingEnv(need = []) {
     fail('.env.staging.local not found. Follow step 4 of docs/STAGING_SETUP.md to create it.')
   }
   const env = parseEnvFile(STAGING_ENV)
-  for (const key of ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY', ...need]) {
+  for (const key of ['VITE_STAGING_SUPABASE_URL', 'VITE_STAGING_SUPABASE_ANON_KEY', ...need]) {
     if (!env[key] || env[key].includes('your-') || env[key].includes('<')) {
       fail(`${key} is missing or still a placeholder in .env.staging.local.`)
     }
   }
 
-  const stagingRef = projectRef(env.VITE_SUPABASE_URL)
-  if (!stagingRef) fail('VITE_SUPABASE_URL in .env.staging.local must look like https://<ref>.supabase.co')
+  const stagingRef = projectRef(env.VITE_STAGING_SUPABASE_URL)
+  if (!stagingRef) fail('VITE_STAGING_SUPABASE_URL in .env.staging.local must look like https://<ref>.supabase.co')
 
   // ---- production guard -------------------------------------------------
   const prodRef = existsSync(PROD_ENV) ? projectRef(parseEnvFile(PROD_ENV).VITE_SUPABASE_URL) : null

@@ -78,7 +78,7 @@ In the **staging** project:
    - **Allow anonymous sign-ins**: **ON** — *temporarily*. The tests need it on to prove that even a working anonymous session gets no data. You'll turn it off in Step 11.
    - Save.
 2. **Authentication → URL Configuration**
-   - **Site URL:** `http://localhost:5173`
+   - **Site URL:** `http://localhost:5180` (the staging app's own address — see Step 12)
    - Save.
 
 ---
@@ -94,8 +94,8 @@ In the **staging** project:
 
 | Setting | Where to find it (in the **staging** project) |
 |---|---|
-| `VITE_SUPABASE_URL` | **Project Settings → API → Project URL** (looks like `https://abcd….supabase.co`) |
-| `VITE_SUPABASE_ANON_KEY` | **Project Settings → API → Project API keys → `anon` `public`** (or the `sb_publishable_…` key). **Not** `service_role`. |
+| `VITE_STAGING_SUPABASE_URL` | **Project Settings → API → Project URL** (looks like `https://abcd….supabase.co`) |
+| `VITE_STAGING_SUPABASE_ANON_KEY` | **Project Settings → API → Project API keys → `anon` `public`** (or the `sb_publishable_…` key). **Not** `service_role`. |
 | `STAGING_DB_URL` | Click **Connect** (top bar) → **Session pooler** → copy the **URI**. Replace `[YOUR-PASSWORD]` with the password from Step 2. |
 | `STAGING_DB_SSL_CA` | Optional but recommended: first create the folder with `mkdir .staging-state`, then **Project Settings → Database → SSL Configuration → Download certificate**. Save the file as `.staging-state/staging-ca.crt` inside the project folder, then set `STAGING_DB_SSL_CA=.staging-state/staging-ca.crt`. |
 | `STAGING_ADMIN_EMAIL` / `PASSWORD` | Choose them now; you'll create this account in Step 6. Use a password you don't use anywhere else. |
@@ -179,13 +179,14 @@ These accounts exist only in the staging project's own login system — complete
    - Tick **Auto Confirm User**
    - **Create user**
 2. (Optional) repeat for `STAGING_EDITOR_EMAIL`.
-3. **Staging** → **SQL Editor → New query**, check the project name says *staging*, then run (with your emails):
-   ```sql
-   update profiles set role = 'admin'  where email = 'your-staging-admin@example.com';
-   update profiles set role = 'editor' where email = 'your-staging-editor@example.com';
-   select email, role from profiles;
+3. Give the accounts their roles (this talks only to staging):
    ```
-   You should see your admin with `admin` (and editor with `editor`).
+   npm run staging:set-role
+   npm run staging:set-role -- your-staging-editor@example.com editor
+   ```
+   The first command makes `STAGING_ADMIN_EMAIL` an admin. Each prints the staging account list — you should see your admin as `admin` (and the editor as `editor`).
+
+   (Equivalent by hand: **staging** SQL Editor → `update profiles set role = 'admin' where email = '…';`)
 
 If **Create user** fails with *Database error creating new user*, Step 5a didn't apply the 017 workaround — stop and send the Step 5a output.
 
@@ -311,11 +312,13 @@ These run directly against the staging database — every test inside a transact
 
 ## Step 12 — Click through the real app against staging
 
+The full step-by-step manual test plan — every section, with expected results — is in **[STAGING_APP_TESTING.md](STAGING_APP_TESTING.md)**. The short version below is a quick health check.
+
 ```
 npm run dev:staging
 ```
 
-Open the address it prints (usually `http://localhost:5173`).
+Open **http://localhost:5180**. A yellow **STAGING** bar across the top confirms you are on staging; the dev server refuses to start at all if `.env.staging.local` is missing or points at production.
 
 1. **Private/incognito window first:** you should land on the **login page** and see no data. (Before this branch, visitors were let straight in.)
 2. Sign in with your **staging admin**. Then check each item:
