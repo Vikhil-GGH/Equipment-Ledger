@@ -26,10 +26,18 @@ export interface AssetHistoryRow {
 
 // serialized_assets' history table is 'serialized_asset_history' (singular
 // "asset") — a naming inconsistency from the migration, not a typo here.
+// Every other collection follows the regular <collection>_history pattern.
 function historyTable(collection: AssetCollection) {
-  return collection === 'serialized_assets'
-    ? ('serialized_asset_history' as const)
-    : ('active_laptops_np_history' as const)
+  switch (collection) {
+    case 'serialized_assets':
+      return 'serialized_asset_history' as const
+    case 'active_laptops_np':
+      return 'active_laptops_np_history' as const
+    case 'monitors':
+      return 'monitors_history' as const
+    case 'other_equipment':
+      return 'other_equipment_history' as const
+  }
 }
 
 export function useAssetsList(collection: AssetCollection, search?: string) {
@@ -132,7 +140,7 @@ export function usePerformLifecycleAction(collection: AssetCollection) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async ({ assetId, action, assignedTo, detail }: PerformActionInput) => {
-      const { error } = await supabase.rpc('perform_lifecycle_action', {
+      const { data, error } = await supabase.rpc('perform_lifecycle_action', {
         p_collection: collection,
         p_asset_id: assetId,
         p_action: action,
@@ -140,8 +148,14 @@ export function usePerformLifecycleAction(collection: AssetCollection) {
         p_detail: detail ?? null,
       })
       if (error) throw error
+      // Provide/Collect/Decommission can move a laptop between Laptop
+      // Inventory and Active Laptops (NP) — see
+      // supabase/migrations/20260901000021_inventory_active_laptop_moves.sql.
+      // The RPC reports back where the asset actually ended up so the
+      // caller can redirect off a now-stale URL.
+      return data as AssetCollection
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: (resultCollection, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['assets', collection, 'list'] })
       void queryClient.invalidateQueries({
         queryKey: ['assets', collection, 'detail', variables.assetId],
@@ -150,8 +164,22 @@ export function usePerformLifecycleAction(collection: AssetCollection) {
         queryKey: ['assets', collection, 'history', variables.assetId],
       })
       void queryClient.invalidateQueries({ queryKey: ['stats', collection] })
+      if (resultCollection !== collection) {
+        void queryClient.invalidateQueries({ queryKey: ['assets', resultCollection, 'list'] })
+        void queryClient.invalidateQueries({ queryKey: ['stats', resultCollection] })
+      }
     },
   })
+}
+
+// A laptop provided from Laptop Inventory now lives in Active Laptops (NP)
+// until it's collected/decommissioned (see
+// supabase/migrations/20260901000021_inventory_active_laptop_moves.sql), so
+// the real "available to swap in" pool for Active Laptops (NP) is split
+// across both tables — perform_swap already knows how to pick up a
+// replacement from either, this just needs to surface both as candidates.
+const SWAP_CANDIDATE_COLLECTIONS: Partial<Record<AssetCollection, AssetCollection[]>> = {
+  active_laptops_np: ['active_laptops_np', 'serialized_assets'],
 }
 
 export function useSwapCandidates(collection: AssetCollection, excludeId: string | undefined) {
@@ -159,14 +187,24 @@ export function useSwapCandidates(collection: AssetCollection, excludeId: string
     queryKey: ['assets', collection, 'swap-candidates', excludeId],
     enabled: !!excludeId,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from(collection)
-        .select('id, name, serial, status')
-        .in('status', ['available', 'decommissioned'])
-        .neq('id', excludeId!)
-        .order('serial', { ascending: true })
-      if (error) throw error
-      return data as Pick<AssetRow, 'id' | 'name' | 'serial' | 'status'>[]
+      const collections = SWAP_CANDIDATE_COLLECTIONS[collection] ?? [collection]
+
+      const results = await Promise.all(
+        collections.map((c) =>
+          supabase
+            .from(c)
+            .select('id, name, serial, status')
+            .in('status', ['available', 'decommissioned'])
+            .neq('id', excludeId!),
+        ),
+      )
+
+      const rows: Pick<AssetRow, 'id' | 'name' | 'serial' | 'status'>[] = []
+      for (const result of results) {
+        if (result.error) throw result.error
+        rows.push(...(result.data as Pick<AssetRow, 'id' | 'name' | 'serial' | 'status'>[]))
+      }
+      return rows.sort((a, b) => a.serial.localeCompare(b.serial))
     },
   })
 }
@@ -181,15 +219,19 @@ export function useSwap(collection: AssetCollection) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async ({ oldAssetId, newAssetId, reason }: SwapInput) => {
-      const { error } = await supabase.rpc('perform_swap', {
+      const { data, error } = await supabase.rpc('perform_swap', {
         p_collection: collection,
         p_old_asset_id: oldAssetId,
         p_new_asset_id: newAssetId,
         p_reason: reason,
       })
       if (error) throw error
+      // The replacement may have been picked up from the other table (see
+      // usePerformLifecycleAction above) — reports back where the
+      // swapped-out (old) asset ended up, for the same reason.
+      return data as AssetCollection
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: (resultCollection, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['assets', collection] })
       void queryClient.invalidateQueries({ queryKey: ['stats', collection] })
       void queryClient.invalidateQueries({
@@ -198,6 +240,10 @@ export function useSwap(collection: AssetCollection) {
       void queryClient.invalidateQueries({
         queryKey: ['assets', collection, 'detail', variables.newAssetId],
       })
+      if (resultCollection !== collection) {
+        void queryClient.invalidateQueries({ queryKey: ['assets', resultCollection] })
+        void queryClient.invalidateQueries({ queryKey: ['stats', resultCollection] })
+      }
     },
   })
 }

@@ -37,12 +37,16 @@ const BULK_FIELDS: { key: keyof RawBulkImportRow; label: string; required: boole
 const TARGET_LABELS: Record<ImportTarget, string> = {
   serialized_assets: 'Serialized Assets',
   active_laptops_np: 'Active Laptops (NP)',
+  monitors: 'Monitors',
+  other_equipment: 'Other Equipment',
   bulk_items: 'Bulk Stock',
 }
 
 const TARGET_PATH: Record<ImportTarget, string> = {
   serialized_assets: '/serialized-assets',
   active_laptops_np: '/active-laptops-np',
+  monitors: '/monitors',
+  other_equipment: '/other-equipment',
   bulk_items: '/bulk-stock',
 }
 

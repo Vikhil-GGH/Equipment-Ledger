@@ -65,7 +65,7 @@ export function BulkStockListView() {
             </p>
             <div className="mt-2 grid grid-cols-5 gap-1 text-center text-xs">
               {BUCKETS.map((bucket) => (
-                <div key={bucket} className="rounded bg-neutral-100 py-1 dark:bg-neutral-800">
+                <div key={bucket} className="rounded bg-indigo-50/60 py-1 dark:bg-neutral-800">
                   <div className="font-medium text-neutral-900 dark:text-neutral-100">
                     {item[bucket]}
                   </div>

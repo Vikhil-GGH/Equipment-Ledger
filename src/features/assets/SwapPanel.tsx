@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { AssetCollection } from '../../types/database.types'
+import { COLLECTION_BASE_PATH } from '../../lib/lifecycle'
 import { getErrorMessage } from '../../lib/errors'
 import { useSwap, useSwapCandidates, type AssetRow } from './api'
 
@@ -14,6 +16,7 @@ export function SwapPanel({
   onDone: () => void
   onCancel: () => void
 }) {
+  const navigate = useNavigate()
   const { data: candidates, isLoading } = useSwapCandidates(collection, asset.id)
   const swap = useSwap(collection)
   const [newAssetId, setNewAssetId] = useState('')
@@ -31,8 +34,15 @@ export function SwapPanel({
       return
     }
     try {
-      await swap.mutateAsync({ oldAssetId: asset.id, newAssetId, reason: reason.trim() })
+      const resultCollection = await swap.mutateAsync({
+        oldAssetId: asset.id,
+        newAssetId,
+        reason: reason.trim(),
+      })
       onDone()
+      if (resultCollection !== collection) {
+        navigate(`${COLLECTION_BASE_PATH[resultCollection]}/${asset.id}`, { replace: true })
+      }
     } catch (err) {
       console.error('perform_swap failed:', err)
       setError(getErrorMessage(err, 'Swap failed'))

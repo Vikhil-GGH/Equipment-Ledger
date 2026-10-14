@@ -30,7 +30,7 @@ export function Drawer({
         }`}
       />
       <nav
-        className={`absolute inset-y-0 left-0 flex w-72 max-w-[80vw] flex-col gap-1 bg-white p-4 shadow-lg transition-transform duration-200 ease-out dark:bg-neutral-900 ${
+        className={`absolute inset-y-0 left-0 flex w-72 max-w-[80vw] flex-col shadow-lg transition-transform duration-200 ease-out ${
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
       >

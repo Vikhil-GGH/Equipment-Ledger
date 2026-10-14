@@ -3,111 +3,188 @@ import { Link, NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../features/auth/useAuth'
 import { Drawer } from './Drawer'
 
-const NAV_ITEMS = [
-  { to: '/', label: 'Dashboard' },
+interface NavItem {
+  to: string
+  label: string
+}
+
+interface NavGroup {
+  heading: string
+  items: NavItem[]
+}
+
+const WORKSPACE_ITEMS: NavItem[] = [
+  { to: '/', label: 'Overview' },
   { to: '/scan', label: 'Scan' },
-  { to: '/serialized-assets', label: 'Serialized Assets' },
+  { to: '/serialized-assets', label: 'Laptop Inventory' },
   { to: '/active-laptops-np', label: 'Active Laptops (NP)' },
-  { to: '/bulk-stock', label: 'Bulk Stock' },
   { to: '/onboarding', label: 'Onboarding' },
   { to: '/offboarding', label: 'Offboarding' },
+  { to: '/monitors', label: 'Monitors' },
+  { to: '/other-equipment', label: 'Other Equipment' },
+  { to: '/bulk-stock', label: 'Bulk Stock' },
 ]
 
+function useNavGroups(): NavGroup[] {
+  const { role } = useAuth()
+  const isAdmin = role === 'admin'
+  const isAdminOrEditor = role === 'admin' || role === 'editor'
+
+  const groups: NavGroup[] = [{ heading: 'Workspace', items: WORKSPACE_ITEMS }]
+
+  const adminItems: NavItem[] = []
+  if (isAdmin) adminItems.push({ to: '/admin', label: 'Access & Roles' })
+  if (isAdminOrEditor) adminItems.push({ to: '/import-history', label: 'Import History' })
+  if (adminItems.length > 0) groups.push({ heading: 'Administration', items: adminItems })
+
+  if (isAdmin) {
+    groups.push({
+      heading: 'Data',
+      items: [
+        { to: '/data', label: 'Export backup' },
+        { to: '/data', label: 'Import backup' },
+      ],
+    })
+  }
+
+  return groups
+}
+
+const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+  `block rounded-md px-3 py-1.5 text-sm transition ${
+    isActive
+      ? 'bg-teal-500/15 font-medium text-teal-300'
+      : 'text-neutral-400 hover:bg-white/5 hover:text-neutral-100'
+  }`
+
+function Brand() {
+  return (
+    <div className="flex items-center gap-2.5 px-2">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-500 text-white">
+        <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
+          <path
+            d="M12 3a9 9 0 1 0 9 9"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+          <path d="M12 8a4 4 0 1 0 4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      </span>
+      <div className="leading-tight">
+        <p className="text-sm font-semibold text-white">GroundGame Health</p>
+        <p className="text-xs text-neutral-400">Equipment Ledger</p>
+      </div>
+    </div>
+  )
+}
+
+function NavGroups({ groups, onNavigate }: { groups: NavGroup[]; onNavigate?: () => void }) {
+  return (
+    <nav className="flex flex-col gap-5">
+      {groups.map((group) => (
+        <div key={group.heading}>
+          <p className="mb-1.5 px-3 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+            {group.heading}
+          </p>
+          <div className="flex flex-col gap-0.5">
+            {group.items.map((item) => (
+              <NavLink
+                key={item.label}
+                to={item.to}
+                end={item.to === '/'}
+                onClick={onNavigate}
+                className={navLinkClass}
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </div>
+        </div>
+      ))}
+    </nav>
+  )
+}
+
+function SidebarFooter() {
+  const { profile, signOut } = useAuth()
+  return (
+    <div className="border-t border-white/10 px-3 py-3">
+      <p className="truncate text-xs text-neutral-300">{profile?.email}</p>
+      <div className="mt-1 flex items-center justify-between">
+        <span className="text-xs text-neutral-500">{profile?.role}</span>
+        <button
+          onClick={() => void signOut()}
+          className="text-xs font-medium text-neutral-400 hover:text-neutral-100"
+        >
+          Sign out
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
-  const { profile, role, signOut } = useAuth()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const location = useLocation()
-  const navItems = [
-    ...NAV_ITEMS,
-    ...(role === 'admin' || role === 'editor' ? [{ to: '/import', label: 'Import' }] : []),
-    ...(role === 'admin' ? [{ to: '/admin', label: 'Admin' }] : []),
-  ]
-
-  const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-    isActive
-      ? 'font-medium text-neutral-900 dark:text-neutral-100'
-      : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
+  const groups = useNavGroups()
 
   return (
-    <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950">
-      <header className="flex items-center justify-between gap-3 border-b border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
-        <div className="flex items-center gap-6">
+    <div className="min-h-screen sm:flex">
+      {/* Desktop sidebar */}
+      <aside className="hidden w-64 shrink-0 flex-col justify-between bg-neutral-950 sm:flex">
+        <div className="flex flex-col gap-6 overflow-y-auto px-3 py-4">
+          <Brand />
+          <NavGroups groups={groups} />
+        </div>
+        <SidebarFooter />
+      </aside>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Mobile top bar */}
+        <header className="flex items-center gap-3 border-b border-stone-100 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900 sm:hidden">
           <button
             onClick={() => setDrawerOpen(true)}
             aria-label="Open menu"
-            className="-ml-1 rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 sm:hidden dark:hover:bg-neutral-800"
+            className="-ml-1 rounded-md p-1.5 text-neutral-500 hover:bg-stone-100 dark:hover:bg-neutral-800"
           >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M4 6h16M4 12h16M4 18h16" strokeLinecap="round" />
             </svg>
           </button>
-          <span className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+          <span className="text-sm font-semibold text-teal-700 dark:text-teal-400">
             Equipment Ledger
           </span>
-          <nav className="hidden flex-wrap gap-4 text-sm sm:flex">
-            {navItems.map((item) => (
-              <NavLink key={item.to} to={item.to} end={item.to === '/'} className={navLinkClass}>
-                {item.label}
-              </NavLink>
-            ))}
-          </nav>
-        </div>
-        <div className="flex items-center gap-3 text-sm text-neutral-500">
-          <span className="hidden sm:inline">
-            {profile?.email} <span className="text-neutral-400">· {profile?.role}</span>
-          </span>
-          <button
-            onClick={() => void signOut()}
-            className="rounded-md border border-neutral-300 px-2 py-1 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+        </header>
+
+        <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)}>
+          <div className="flex h-full flex-col justify-between gap-6 overflow-y-auto bg-neutral-950 px-3 py-4">
+            <div className="flex flex-col gap-6">
+              <Brand />
+              <NavGroups groups={groups} onNavigate={() => setDrawerOpen(false)} />
+            </div>
+            <SidebarFooter />
+          </div>
+        </Drawer>
+
+        <main className="flex-1 p-4 pb-24 sm:pb-4">{children}</main>
+
+        {location.pathname !== '/scan' && (
+          <Link
+            to="/scan"
+            aria-label="Scan a barcode"
+            className="fixed bottom-6 right-6 flex h-14 w-14 items-center justify-center rounded-full bg-teal-600 text-white shadow-lg transition hover:bg-teal-700 sm:hidden"
           >
-            Sign out
-          </button>
-        </div>
-      </header>
-
-      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)}>
-        <div className="mb-4 border-b border-neutral-100 pb-3 dark:border-neutral-800">
-          <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
-            {profile?.email}
-          </p>
-          <p className="text-xs text-neutral-500">{profile?.role}</p>
-        </div>
-        {navItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === '/'}
-            onClick={() => setDrawerOpen(false)}
-            className={({ isActive }) =>
-              `rounded-md px-3 py-2 text-sm ${
-                isActive
-                  ? 'bg-neutral-100 font-medium text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100'
-                  : 'text-neutral-600 hover:bg-neutral-50 dark:text-neutral-400 dark:hover:bg-neutral-800/50'
-              }`
-            }
-          >
-            {item.label}
-          </NavLink>
-        ))}
-      </Drawer>
-
-      <main className="p-4 pb-24 sm:pb-4">{children}</main>
-
-      {location.pathname !== '/scan' && (
-        <Link
-          to="/scan"
-          aria-label="Scan a barcode"
-          className="fixed bottom-6 right-6 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg transition hover:bg-emerald-700 sm:hidden"
-        >
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path
-              d="M4 8V6a2 2 0 0 1 2-2h2M20 8V6a2 2 0 0 0-2-2h-2M4 16v2a2 2 0 0 0 2 2h2M20 16v2a2 2 0 0 1-2 2h-2M7 12h10"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </Link>
-      )}
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path
+                d="M4 8V6a2 2 0 0 1 2-2h2M20 8V6a2 2 0 0 0-2-2h-2M4 16v2a2 2 0 0 0 2 2h2M20 16v2a2 2 0 0 1-2 2h-2M7 12h10"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </Link>
+        )}
+      </div>
     </div>
   )
 }

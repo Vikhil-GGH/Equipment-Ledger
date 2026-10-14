@@ -88,6 +88,19 @@ export function canSwap(status: AssetStatus): boolean {
 export const SWAP_CANDIDATE_STATUSES: AssetStatus[] = ['available', 'decommissioned']
 
 /**
+ * A laptop can change collections (Laptop Inventory <-> Active Laptops
+ * (NP), see 20260901000021_inventory_active_laptop_moves.sql) while
+ * keeping its id, so a page keyed by the old collection's path needs to
+ * redirect to the new one after a move.
+ */
+export const COLLECTION_BASE_PATH: Record<AssetCollection, string> = {
+  serialized_assets: '/serialized-assets',
+  active_laptops_np: '/active-laptops-np',
+  monitors: '/monitors',
+  other_equipment: '/other-equipment',
+}
+
+/**
  * Active Laptops (NP) displays 'provided' as "Active" in its UI only — the
  * underlying enum value is unchanged. Every other status/collection uses
  * the plain capitalized enum value.

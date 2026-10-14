@@ -15,6 +15,8 @@ const STEPS: { key: OffboardingStep; label: string }[] = [
 const COLLECTION_LABELS: Record<AssetCollection, string> = {
   serialized_assets: 'Serialized Assets',
   active_laptops_np: 'Active Laptops (NP)',
+  monitors: 'Monitors',
+  other_equipment: 'Other Equipment',
 }
 
 export function OffboardingTrackPage() {

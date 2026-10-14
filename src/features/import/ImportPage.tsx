@@ -8,6 +8,8 @@ type ImportTarget = AssetCollection | 'bulk_items'
 const OPTIONS: { value: ImportTarget; label: string }[] = [
   { value: 'serialized_assets', label: 'Serialized Assets' },
   { value: 'active_laptops_np', label: 'Active Laptops (NP)' },
+  { value: 'monitors', label: 'Monitors' },
+  { value: 'other_equipment', label: 'Other Equipment' },
   { value: 'bulk_items', label: 'Bulk Stock' },
 ]
 

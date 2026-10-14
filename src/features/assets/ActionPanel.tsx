@@ -1,6 +1,13 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { AssetAction, AssetCollection } from '../../types/database.types'
-import { ACTION_LABELS, ACTIONS_REQUIRING_ASSIGNEE, canSwap, getAllowedActions } from '../../lib/lifecycle'
+import {
+  ACTION_LABELS,
+  ACTIONS_REQUIRING_ASSIGNEE,
+  COLLECTION_BASE_PATH,
+  canSwap,
+  getAllowedActions,
+} from '../../lib/lifecycle'
 import { getErrorMessage } from '../../lib/errors'
 import { useAuth } from '../auth/useAuth'
 import { usePerformLifecycleAction, type AssetRow } from './api'
@@ -19,6 +26,7 @@ export function ActionPanel({
   asset: AssetRow
 }) {
   const { role } = useAuth()
+  const navigate = useNavigate()
   const performAction = usePerformLifecycleAction(collection)
   const [pendingAction, setPendingAction] = useState<AssetAction | null>(null)
   const [showSwap, setShowSwap] = useState(false)
@@ -47,13 +55,16 @@ export function ActionPanel({
     if (!pendingAction) return
     setError(null)
     try {
-      await performAction.mutateAsync({
+      const resultCollection = await performAction.mutateAsync({
         assetId: asset.id,
         action: pendingAction,
         assignedTo: ACTIONS_REQUIRING_ASSIGNEE.has(pendingAction) ? assignedTo : null,
         detail: detail || null,
       })
       setPendingAction(null)
+      if (resultCollection !== collection) {
+        navigate(`${COLLECTION_BASE_PATH[resultCollection]}/${asset.id}`, { replace: true })
+      }
     } catch (err) {
       console.error('perform_lifecycle_action failed:', err)
       setError(getErrorMessage(err, 'Action failed'))

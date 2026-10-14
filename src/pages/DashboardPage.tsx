@@ -22,6 +22,8 @@ export function DashboardPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <StatsCard collection="serialized_assets" title="Serialized Assets" />
         <StatsCard collection="active_laptops_np" title="Active Laptops (NP)" />
+        <StatsCard collection="monitors" title="Monitors" />
+        <StatsCard collection="other_equipment" title="Other Equipment" />
         <BulkStatsCard />
       </div>
     </div>
@@ -41,7 +43,7 @@ function StatsCard({ collection, title }: { collection: AssetCollection; title: 
       {isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
       <ul className="grid grid-cols-2 gap-2 text-sm">
         {data?.map((row) => (
-          <li key={row.status} className="flex justify-between rounded bg-neutral-100 px-2 py-1 dark:bg-neutral-800">
+          <li key={row.status} className="flex justify-between rounded bg-indigo-50/60 px-2 py-1 dark:bg-neutral-800">
             <span className="text-neutral-600 dark:text-neutral-400">
               {getStatusLabel(row.status, collection)}
             </span>
@@ -73,7 +75,7 @@ function BulkStatsCard() {
           {(Object.keys(BULK_BUCKET_LABELS) as (keyof typeof BULK_BUCKET_LABELS)[]).map((bucket) => (
             <li
               key={bucket}
-              className="flex justify-between rounded bg-neutral-100 px-2 py-1 dark:bg-neutral-800"
+              className="flex justify-between rounded bg-indigo-50/60 px-2 py-1 dark:bg-neutral-800"
             >
               <span className="text-neutral-600 dark:text-neutral-400">
                 {BULK_BUCKET_LABELS[bucket]}

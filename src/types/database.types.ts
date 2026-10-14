@@ -32,7 +32,11 @@ export type AssetAction =
   | 'mark_repaired'
   | 'mark_nonfunctional'
 
-export type AssetCollection = 'serialized_assets' | 'active_laptops_np'
+export type AssetCollection =
+  | 'serialized_assets'
+  | 'active_laptops_np'
+  | 'monitors'
+  | 'other_equipment'
 
 export type BulkBucket =
   | 'available'
@@ -179,6 +183,7 @@ export interface Database {
           location: string | null
           created_at: string
           updated_at: string
+          moved_from_inventory: boolean
         }
         Insert: {
           id?: string
@@ -190,6 +195,7 @@ export interface Database {
           location?: string | null
           created_at?: string
           updated_at?: string
+          moved_from_inventory?: boolean
         }
         Update: {
           id?: string
@@ -201,6 +207,7 @@ export interface Database {
           location?: string | null
           created_at?: string
           updated_at?: string
+          moved_from_inventory?: boolean
         }
         Relationships: []
       }
@@ -239,6 +246,162 @@ export interface Database {
           },
           {
             foreignKeyName: 'active_laptops_np_history_actor_user_id_fkey'
+            columns: ['actor_user_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      monitors: {
+        Row: {
+          id: string
+          name: string
+          category: string
+          serial: string
+          status: AssetStatus
+          assigned_to: string | null
+          location: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          category: string
+          serial: string
+          status?: AssetStatus
+          assigned_to?: string | null
+          location?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          category?: string
+          serial?: string
+          status?: AssetStatus
+          assigned_to?: string | null
+          location?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      monitors_history: {
+        Row: {
+          id: string
+          asset_id: string
+          date: string
+          action: string
+          detail: string | null
+          actor_user_id: string | null
+        }
+        Insert: {
+          id?: string
+          asset_id: string
+          date?: string
+          action: string
+          detail?: string | null
+          actor_user_id?: string | null
+        }
+        Update: {
+          id?: string
+          asset_id?: string
+          date?: string
+          action?: string
+          detail?: string | null
+          actor_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'monitors_history_asset_id_fkey'
+            columns: ['asset_id']
+            isOneToOne: false
+            referencedRelation: 'monitors'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'monitors_history_actor_user_id_fkey'
+            columns: ['actor_user_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      other_equipment: {
+        Row: {
+          id: string
+          name: string
+          category: string
+          serial: string
+          status: AssetStatus
+          assigned_to: string | null
+          location: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          category: string
+          serial: string
+          status?: AssetStatus
+          assigned_to?: string | null
+          location?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          category?: string
+          serial?: string
+          status?: AssetStatus
+          assigned_to?: string | null
+          location?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      other_equipment_history: {
+        Row: {
+          id: string
+          asset_id: string
+          date: string
+          action: string
+          detail: string | null
+          actor_user_id: string | null
+        }
+        Insert: {
+          id?: string
+          asset_id: string
+          date?: string
+          action: string
+          detail?: string | null
+          actor_user_id?: string | null
+        }
+        Update: {
+          id?: string
+          asset_id?: string
+          date?: string
+          action?: string
+          detail?: string | null
+          actor_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'other_equipment_history_asset_id_fkey'
+            columns: ['asset_id']
+            isOneToOne: false
+            referencedRelation: 'other_equipment'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'other_equipment_history_actor_user_id_fkey'
             columns: ['actor_user_id']
             isOneToOne: false
             referencedRelation: 'profiles'
@@ -462,6 +625,14 @@ export interface Database {
         Row: { status: AssetStatus | null; count: number | null }
         Relationships: []
       }
+      monitors_stats: {
+        Row: { status: AssetStatus | null; count: number | null }
+        Relationships: []
+      }
+      other_equipment_stats: {
+        Row: { status: AssetStatus | null; count: number | null }
+        Relationships: []
+      }
       bulk_stock_stats: {
         Row: {
           available: number | null
@@ -500,7 +671,7 @@ export interface Database {
           p_assigned_to?: string | null
           p_detail?: string | null
         }
-        Returns: undefined
+        Returns: AssetCollection
       }
       perform_swap: {
         Args: {
@@ -510,7 +681,7 @@ export interface Database {
           p_new_asset_id: string
           p_reason: string
         }
-        Returns: undefined
+        Returns: AssetCollection
       }
       onboarding_assign_device: {
         Args: {
@@ -560,6 +731,13 @@ export interface Database {
           p_rows: Json
         }
         Returns: Json
+      }
+      restore_backup: {
+        Args: {
+          [key: string]: unknown
+          p_payload: Json
+        }
+        Returns: undefined
       }
     }
     Enums: {

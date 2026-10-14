@@ -15,6 +15,15 @@ type Stage =
 const COLLECTION_PATH: Record<AssetCollection, string> = {
   serialized_assets: '/serialized-assets',
   active_laptops_np: '/active-laptops-np',
+  monitors: '/monitors',
+  other_equipment: '/other-equipment',
+}
+
+const COLLECTION_LABEL: Record<AssetCollection, string> = {
+  serialized_assets: 'Serialized Asset',
+  active_laptops_np: 'Active Laptop (NP)',
+  monitors: 'Monitor',
+  other_equipment: 'Other Equipment',
 }
 
 export function ScanPage() {
@@ -53,7 +62,7 @@ export function ScanPage() {
     return (
       <div className="mx-auto max-w-md space-y-4">
         <h1 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
-          Add {stage.collection === 'serialized_assets' ? 'Serialized Asset' : 'Active Laptop (NP)'}
+          Add {COLLECTION_LABEL[stage.collection]}
         </h1>
         <div className="card">
           <AddAssetForm
@@ -88,6 +97,20 @@ export function ScanPage() {
             onClick={() => setStage({ name: 'adding', serial: stage.serial, collection: 'active_laptops_np' })}
           >
             Active Laptop (NP)
+          </button>
+          <button
+            className="btn-primary"
+            onClick={() => setStage({ name: 'adding', serial: stage.serial, collection: 'monitors' })}
+          >
+            Monitor
+          </button>
+          <button
+            className="btn-primary"
+            onClick={() =>
+              setStage({ name: 'adding', serial: stage.serial, collection: 'other_equipment' })
+            }
+          >
+            Other Equipment
           </button>
           <button className="btn-secondary" onClick={() => setStage({ name: 'scanning' })}>
             Cancel

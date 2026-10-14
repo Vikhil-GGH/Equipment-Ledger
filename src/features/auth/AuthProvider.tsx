@@ -9,6 +9,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false)
 
   const loadProfile = useCallback(async (userId: string) => {
     const { data, error } = await supabase
@@ -32,16 +33,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     supabase.auth.getSession().then(async ({ data }) => {
       if (cancelled) return
-      setSession(data.session)
-      setUser(data.session?.user ?? null)
-      if (data.session?.user) {
-        await loadProfile(data.session.user.id)
+      let session = data.session
+      // Temporary public-demo mode: nobody has to sign in to open the app,
+      // so give anyone without a session an anonymous one automatically
+      // (see 20260901000017_anonymous_public_demo.sql for the matching role
+      // grant). Real sign-in still works and simply replaces this session.
+      if (!session) {
+        const { data: anon, error } = await supabase.auth.signInAnonymously()
+        if (cancelled) return
+        if (error) {
+          setLoading(false)
+          return
+        }
+        session = anon.session
+      }
+      setSession(session)
+      setUser(session?.user ?? null)
+      if (session?.user) {
+        await loadProfile(session.user.id)
       }
       setLoading(false)
     })
 
     const { data: listener } = supabase.auth.onAuthStateChange(
-      async (_event, newSession) => {
+      async (event, newSession) => {
+        // Fires for both our own verifyOtp(type: 'recovery') call and for
+        // Supabase auto-exchanging a clicked recovery link's URL — either
+        // way this session must not be treated as a normal sign-in.
+        if (event === 'PASSWORD_RECOVERY') {
+          setIsPasswordRecovery(true)
+        }
         setSession(newSession)
         setUser(newSession?.user ?? null)
         if (newSession?.user) {
@@ -65,13 +86,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
+    setIsPasswordRecovery(false)
   }, [])
+
+  const clearPasswordRecovery = useCallback(() => setIsPasswordRecovery(false), [])
 
   const role: UserRole | null = profile?.role ?? null
 
   const value = useMemo(
-    () => ({ session, user, profile, role, loading, signIn, signOut }),
-    [session, user, profile, role, loading, signIn, signOut],
+    () => ({
+      session,
+      user,
+      profile,
+      role,
+      loading,
+      isPasswordRecovery,
+      clearPasswordRecovery,
+      signIn,
+      signOut,
+    }),
+    [session, user, profile, role, loading, isPasswordRecovery, clearPasswordRecovery, signIn, signOut],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -36,7 +36,7 @@ export function BulkItemDetailPage() {
 
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
           {BUCKETS.map((bucket) => (
-            <div key={bucket} className="rounded-lg bg-neutral-100 p-3 text-center dark:bg-neutral-800">
+            <div key={bucket} className="rounded-lg bg-indigo-50/60 p-3 text-center dark:bg-neutral-800">
               <div className="text-xl font-semibold tabular-nums text-neutral-900 dark:text-neutral-100">
                 {item[bucket]}
               </div>
