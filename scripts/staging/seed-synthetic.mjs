@@ -127,6 +127,15 @@ try {
     await one(`insert into offboarding_checklists (employee_name, created_by) values ($1, $2) returning id`, [employee(n), admin.id])
     bump('offboarding checklists')
   }
+  // A legacy-style record with two laptop outcomes ticked (written through
+  // the old flag columns), so the "needs review" handling from migration
+  // 024 can be tested by hand.
+  await one(
+    `insert into offboarding_checklists (employee_name, created_by, removed_access, laptop_received, laptop_retained)
+     values ('Test Employee 46 (legacy conflict)', $1, true, true, true) returning id`,
+    [admin.id],
+  )
+  bump('offboarding checklists')
 
   if (large) {
     // 4 laptops x 140 damage/repair cycles = 1,120 history rows, run

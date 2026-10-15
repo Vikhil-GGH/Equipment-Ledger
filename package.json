@@ -20,7 +20,8 @@
     "dev:staging": "vite --mode staging",
     "staging:set-role": "node scripts/staging/set-role.mjs",
     "staging:reset": "node scripts/staging/reset.mjs",
-    "staging:test-files": "node scripts/staging/make-test-files.mjs"
+    "staging:test-files": "node scripts/staging/make-test-files.mjs",
+    "staging:verify": "vitest run --config vitest.staging.config.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",
