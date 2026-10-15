@@ -17,6 +17,7 @@ import { OffboardingTrackPage } from './features/offboarding/OffboardingTrackPag
 import { AdminPage } from './features/admin/AdminPage'
 import { ImportHistoryPage } from './features/import/ImportHistoryPage'
 import { DataBackupPage } from './features/data/DataBackupPage'
+import { LaptopInventoryPage } from './features/laptops/LaptopInventoryPage'
 
 // html5-qrcode and xlsx (SheetJS) are both heavy — code-split so that
 // weight only loads for someone who actually visits these pages.
@@ -55,37 +56,20 @@ export function App() {
                     </Suspense>
                   }
                 />
-                <Route
-                  path="/serialized-assets"
-                  element={
-                    <AssetListView
-                      collection="serialized_assets"
-                      title="Serialized Assets"
-                      basePath="/serialized-assets"
-                    />
-                  }
-                />
+                {/* One Laptop Inventory over both laptop tables. The old list
+                    URLs redirect into it; detail URLs are unchanged, because a
+                    laptop's detail page (and its lifecycle actions) still
+                    belong to the table it currently lives in. */}
+                <Route path="/laptops" element={<LaptopInventoryPage />} />
+                <Route path="/serialized-assets" element={<Navigate to="/laptops" replace />} />
+                <Route path="/active-laptops-np" element={<Navigate to="/laptops?tab=active" replace />} />
                 <Route
                   path="/serialized-assets/:id"
-                  element={
-                    <AssetDetailPage collection="serialized_assets" basePath="/serialized-assets" />
-                  }
-                />
-                <Route
-                  path="/active-laptops-np"
-                  element={
-                    <AssetListView
-                      collection="active_laptops_np"
-                      title="Active Laptops (NP)"
-                      basePath="/active-laptops-np"
-                    />
-                  }
+                  element={<AssetDetailPage collection="serialized_assets" basePath="/laptops" />}
                 />
                 <Route
                   path="/active-laptops-np/:id"
-                  element={
-                    <AssetDetailPage collection="active_laptops_np" basePath="/active-laptops-np" />
-                  }
+                  element={<AssetDetailPage collection="active_laptops_np" basePath="/laptops" />}
                 />
                 <Route
                   path="/monitors"

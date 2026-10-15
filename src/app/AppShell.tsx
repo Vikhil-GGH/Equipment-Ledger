@@ -16,8 +16,7 @@ interface NavGroup {
 const WORKSPACE_ITEMS: NavItem[] = [
   { to: '/', label: 'Overview' },
   { to: '/scan', label: 'Scan' },
-  { to: '/serialized-assets', label: 'Laptop Inventory' },
-  { to: '/active-laptops-np', label: 'Active Laptops (NP)' },
+  { to: '/laptops', label: 'Laptop Inventory' },
   { to: '/onboarding', label: 'Onboarding' },
   { to: '/offboarding', label: 'Offboarding' },
   { to: '/monitors', label: 'Monitors' },

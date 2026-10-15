@@ -114,8 +114,12 @@ export function useAssignOnboardingDevice(id: string) {
       void queryClient.invalidateQueries({ queryKey: ['onboarding', 'detail', id] })
       // Assigning ticks "Equipment assigned", so the list's progress changes too.
       void queryClient.invalidateQueries({ queryKey: ['onboarding', 'list'] })
+      // An Inventory laptop moves into Active Laptops (NP) when assigned here,
+      // so both tables' lists change.
       void queryClient.invalidateQueries({ queryKey: ['assets', 'active_laptops_np'] })
+      void queryClient.invalidateQueries({ queryKey: ['assets', 'serialized_assets'] })
       void queryClient.invalidateQueries({ queryKey: ['stats', 'active_laptops_np'] })
+      void queryClient.invalidateQueries({ queryKey: ['stats', 'serialized_assets'] })
     },
   })
 }

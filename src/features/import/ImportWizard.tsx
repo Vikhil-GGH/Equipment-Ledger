@@ -43,8 +43,8 @@ const TARGET_LABELS: Record<ImportTarget, string> = {
 }
 
 const TARGET_PATH: Record<ImportTarget, string> = {
-  serialized_assets: '/serialized-assets',
-  active_laptops_np: '/active-laptops-np',
+  serialized_assets: '/laptops?scope=company',
+  active_laptops_np: '/laptops?scope=np',
   monitors: '/monitors',
   other_equipment: '/other-equipment',
   bulk_items: '/bulk-stock',
