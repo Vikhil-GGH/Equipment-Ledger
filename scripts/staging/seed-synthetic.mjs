@@ -165,6 +165,17 @@ try {
   await create('active_laptops_np', 'Lenovo ThinkPad T14', 'Laptop', ' SYN-DUP-C') // leading space
   bump('duplicate patterns (3)')
 
+  // With the employee register (20260901000026): devices assigned above are
+  // already in it (its trigger); link the checklists to employee records the
+  // same way the migration's backfill does.
+  await db.query('reset role')
+  await db.query(`select set_config('request.jwt.claims', '', true)`)
+  const hasRegister = (await one(`select to_regprocedure('public.rebuild_equipment_register_from_assignments()') is not null as yes`)).yes
+  if (hasRegister) {
+    await db.query('select rebuild_equipment_register_from_assignments()')
+    counts['employee register'] = 'linked'
+  }
+
   await db.query('commit')
   console.log('\n✔ Synthetic staging data created:')
   for (const [k, v] of Object.entries(counts)) console.log(`  ${k}: ${v}`)

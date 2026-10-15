@@ -57,6 +57,7 @@ export const STATUS_LABELS: Record<AssetStatus, string> = {
   damaged: 'Damaged',
   decommissioned: 'Decommissioned',
   nonfunctional: 'Nonfunctional',
+  lost: 'Lost',
 }
 
 /** Laptops the NP table holds on behalf of Inventory are company laptops. */

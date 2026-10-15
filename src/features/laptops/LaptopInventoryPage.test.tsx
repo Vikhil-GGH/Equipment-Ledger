@@ -12,6 +12,11 @@ import { useAuth } from '../auth/useAuth'
 vi.mock('./api', () => ({ useLaptopInventory: vi.fn() }))
 vi.mock('./exportLaptops', () => ({ downloadLaptopExport: vi.fn(async () => 0) }))
 vi.mock('../auth/useAuth', () => ({ useAuth: vi.fn() }))
+// Register not present (pre-026 database): the page must behave exactly as before.
+vi.mock('../register/api', () => ({
+  useRegisterAvailable: vi.fn(() => ({ data: false })),
+  useRetainedDeviceIds: vi.fn(() => ({ data: undefined })),
+}))
 vi.mock('../assets/AddAssetForm', () => ({
   AddAssetForm: ({ collection }: { collection: string }) => <p>Add form for {collection}</p>,
 }))

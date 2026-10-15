@@ -11,5 +11,12 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     // Database tests have their own config (vitest.db.config.ts).
     exclude: [...configDefaults.exclude, 'supabase/**'],
+    // Vite would otherwise load the PRODUCTION project from .env. Point the
+    // client at an address nothing listens on, so an accidentally unmocked
+    // call in a test fails fast instead of reaching a real project.
+    env: {
+      VITE_SUPABASE_URL: 'http://127.0.0.1:9',
+      VITE_SUPABASE_ANON_KEY: 'unit-tests-have-no-backend',
+    },
   },
 })

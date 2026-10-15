@@ -13,6 +13,8 @@ export interface OffboardingRow {
   laptop_outcome: OffboardingLaptopOutcome | null
   /** Legacy record had more than one laptop flag ticked; resolved by choosing an outcome. */
   outcome_needs_review: boolean
+  /** Present once the employee register (20260901000026) exists. */
+  employee_id?: string | null
   created_at: string
   updated_at: string
 }
@@ -54,10 +56,19 @@ export function useOffboarding(id: string | undefined) {
 export function useCreateOffboarding() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async ({ employeeName, createdBy }: { employeeName: string; createdBy: string }) => {
+    mutationFn: async ({
+      employeeName,
+      createdBy,
+      employeeId,
+    }: {
+      employeeName: string
+      createdBy: string
+      /** Only sent when the employee register (20260901000026) exists. */
+      employeeId?: string | null
+    }) => {
       const { data, error } = await supabase
         .from('offboarding_checklists')
-        .insert({ employee_name: employeeName, created_by: createdBy })
+        .insert({ employee_name: employeeName, created_by: createdBy, ...(employeeId ? { employee_id: employeeId } : {}) })
         .select('id')
         .single()
       if (error) throw error

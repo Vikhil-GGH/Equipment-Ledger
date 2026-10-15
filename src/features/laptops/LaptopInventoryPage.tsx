@@ -7,6 +7,7 @@ import { useAuth } from '../auth/useAuth'
 import { AddAssetForm } from '../assets/AddAssetForm'
 import { StatusBadge } from '../assets/StatusBadge'
 import { useLaptopInventory } from './api'
+import { useRegisterAvailable, useRetainedDeviceIds } from '../register/api'
 import { downloadLaptopExport } from './exportLaptops'
 import {
   DEFAULT_LAPTOP_SORT,
@@ -61,6 +62,12 @@ export function LaptopInventoryPage() {
   const [exportError, setExportError] = useState<string | null>(null)
 
   const { rows: all, isLoading, error } = useLaptopInventory()
+  // Laptops a former employee keeps with approval (employee register,
+  // 20260901000026) are still Provided — label them so they aren't
+  // mistaken for laptops pending return.
+  const { data: registerAvailable } = useRegisterAvailable()
+  const { data: retained } = useRetainedDeviceIds(!!registerAvailable)
+  const retainedBy = useMemo(() => new Map((retained ?? []).map((r) => [r.asset_id, r.assignee_name])), [retained])
   const canAdd = role === 'admin' || role === 'editor' || role === 'scanner'
   const canImport = role === 'admin' || role === 'editor'
 
@@ -263,6 +270,11 @@ export function LaptopInventoryPage() {
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={r.status} collection="serialized_assets" />
+                      {r.status === 'provided' && retainedBy.get(r.id) === r.assigned_to?.trim() && (
+                        <span className="mt-1 block text-xs font-medium text-indigo-700 dark:text-indigo-300">
+                          Retained by former employee (authorized)
+                        </span>
+                      )}
                       {r.assignmentMismatch && (
                         <span className="mt-1 block text-xs font-medium text-amber-700 dark:text-amber-400">
                           ⚠ Check assignment

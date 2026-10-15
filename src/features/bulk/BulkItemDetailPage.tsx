@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom'
 import { BULK_BUCKET_LABELS } from '../../lib/bulkLifecycle'
 import { BulkActionPanel } from './BulkActionPanel'
 import { useBulkItem, useBulkItemHistory } from './api'
+import { useRegisterAvailable, useTrackedBulkQuantity } from '../register/api'
 
 const BUCKETS = ['available', 'provided', 'retained', 'damaged', 'decommissioned'] as const
 
@@ -9,6 +10,8 @@ export function BulkItemDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { data: item, isLoading, error } = useBulkItem(id)
   const { data: history } = useBulkItemHistory(id)
+  const { data: registerAvailable } = useRegisterAvailable()
+  const { data: tracked } = useTrackedBulkQuantity(id, !!registerAvailable)
 
   if (isLoading) return <p className="text-sm text-neutral-500">Loading…</p>
   if (error || !item) {
@@ -45,6 +48,19 @@ export function BulkItemDetailPage() {
           ))}
         </div>
       </div>
+
+      {registerAvailable && tracked !== undefined && (
+        <p className="text-sm text-neutral-600 dark:text-neutral-400" data-testid="provided-breakdown">
+          Provided {item.provided} = {Math.min(tracked, item.provided)} tracked to named employees +{' '}
+          {Math.max(0, item.provided - tracked)} issued before tracking began (recipient unknown).
+          {tracked > item.provided && (
+            <span className="block text-amber-700 dark:text-amber-400">
+              ⚠ The register shows {tracked} with employees but only {item.provided} are Provided — a return was probably
+              recorded on this page instead of through Offboarding.
+            </span>
+          )}
+        </p>
+      )}
 
       <BulkActionPanel item={item} />
 

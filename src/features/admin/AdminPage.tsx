@@ -3,6 +3,7 @@ import { getErrorMessage } from '../../lib/errors'
 import type { UserRole } from '../../types/database.types'
 import { useAuth } from '../auth/useAuth'
 import { useRemoveUser, useUpdateUserRole, useUsersList, type ProfileRow } from './api'
+import { usePossibleDuplicates, useRegisterAvailable } from '../register/api'
 
 const ROLES: UserRole[] = ['admin', 'editor', 'viewer', 'scanner']
 
@@ -36,6 +37,33 @@ export function AdminPage() {
           <UserRow key={row.id} row={row} isSelf={row.id === user?.id} />
         ))}
       </div>
+
+      <PossibleDuplicateEmployees />
+    </div>
+  )
+}
+
+/** Read-only review list (employee register, 20260901000026). Nothing is merged automatically. */
+function PossibleDuplicateEmployees() {
+  const { data: available } = useRegisterAvailable()
+  const { data: pairs } = usePossibleDuplicates(!!available)
+  if (!available) return null
+  return (
+    <div className="card">
+      <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">Possible duplicate employees</h2>
+      <p className="mb-2 text-xs text-neutral-500">For review only — nothing here is merged automatically.</p>
+      {!pairs?.length ? (
+        <p className="text-sm text-neutral-500">None found.</p>
+      ) : (
+        <ul className="space-y-1 text-sm">
+          {pairs.map((p) => (
+            <li key={`${p.employee_id}-${p.other_employee_id}`}>
+              <span className="font-medium">{p.full_name}</span> and <span className="font-medium">{p.other_full_name}</span>{' '}
+              <span className="text-xs text-neutral-500">— {p.reason}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

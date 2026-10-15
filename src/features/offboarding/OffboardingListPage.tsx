@@ -4,6 +4,9 @@ import { ChecklistListView } from '../../components/ChecklistListView'
 import { Modal } from '../../components/Modal'
 import { getErrorMessage } from '../../lib/errors'
 import { useAuth } from '../auth/useAuth'
+import { useCreateEmployee, useEmployeesNamed, useRegisterAvailable } from '../register/api'
+import { NewEmployeeChoice } from '../register/NewEmployeeChoice'
+import { normalizeName } from '../register/registerModel'
 import { useCreateOffboarding, useOffboardingList } from './api'
 import { offboardingFlag, offboardingProgress } from './offboardingProgress'
 
@@ -49,14 +52,27 @@ export function OffboardingListPage() {
 function StartOffboardingModal({ userId, onClose }: { userId: string; onClose: () => void }) {
   const navigate = useNavigate()
   const createOffboarding = useCreateOffboarding()
+  const createEmployee = useCreateEmployee()
   const [employeeName, setEmployeeName] = useState('')
+  const [employeeChoice, setEmployeeChoice] = useState('')
   const [error, setError] = useState<string | null>(null)
+  // With the employee register (20260901000026), every checklist is linked
+  // to an employee record; a name that already exists must be confirmed.
+  const { data: registerAvailable } = useRegisterAvailable()
+  const nameKey = normalizeName(employeeName)
+  const { data: sameName } = useEmployeesNamed(registerAvailable && nameKey ? nameKey : null)
+  const mustChoose = !!registerAvailable && !!sameName?.length && !employeeChoice
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError(null)
     try {
-      const id = await createOffboarding.mutateAsync({ employeeName, createdBy: userId })
+      let employeeId: string | null = null
+      if (registerAvailable) {
+        employeeId =
+          sameName?.length && employeeChoice !== 'new' ? employeeChoice : await createEmployee.mutateAsync(employeeName.trim())
+      }
+      const id = await createOffboarding.mutateAsync({ employeeName: employeeName.trim(), createdBy: userId, employeeId })
       onClose()
       navigate(`/offboarding/${id}`)
     } catch (err) {
@@ -76,10 +92,14 @@ function StartOffboardingModal({ userId, onClose }: { userId: string; onClose: (
             required
             autoFocus
             value={employeeName}
-            onChange={(e) => setEmployeeName(e.target.value)}
+            onChange={(e) => {
+              setEmployeeName(e.target.value)
+              setEmployeeChoice('')
+            }}
             className="input"
           />
         </label>
+        {registerAvailable && <NewEmployeeChoice name={employeeName} value={employeeChoice} onChange={setEmployeeChoice} />}
         {error && (
           <p role="alert" className="text-sm text-red-600 dark:text-red-400">
             {error}
@@ -89,7 +109,7 @@ function StartOffboardingModal({ userId, onClose }: { userId: string; onClose: (
           <button type="button" className="btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button type="submit" disabled={createOffboarding.isPending} className="btn-primary">
+          <button type="submit" disabled={createOffboarding.isPending || createEmployee.isPending || mustChoose} className="btn-primary">
             {createOffboarding.isPending ? 'Starting…' : 'Start'}
           </button>
         </div>

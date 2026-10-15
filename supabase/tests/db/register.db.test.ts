@@ -76,8 +76,6 @@ async function assignedDeviceCount() {
 
 const one = async <T = Record<string, unknown>>(sql: string, params: unknown[] = []) =>
   (await db.query<T>(sql, params)).rows[0]
-const issueFor = (assetId: string) =>
-  one<Record<string, any>>(`select * from equipment_issues where asset_id = $1 order by created_at desc, closed_at desc nulls first limit 1`, [assetId])
 const openIssueFor = (assetId: string) =>
   one<Record<string, any>>(`select * from equipment_issues where asset_id = $1 and status = 'open'`, [assetId])
 async function deviceRow(id: string) {

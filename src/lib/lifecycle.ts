@@ -8,7 +8,8 @@ import type { AssetAction, AssetCollection, AssetStatus } from '../types/databas
  *
  * Semantic note: 'decommissioned' is NOT terminal — the device is refreshed
  * and re-enters the reissue pool (Provide/Retain/Mark damaged all resume).
- * 'nonfunctional' is the actual terminal state.
+ * 'nonfunctional' is the actual terminal state, and so is 'lost'
+ * (20260901000025), which only offboarding's return_equipment can set.
  */
 export const TRANSITIONS: Record<AssetStatus, Partial<Record<AssetAction, AssetStatus>>> = {
   available: {
@@ -37,6 +38,7 @@ export const TRANSITIONS: Record<AssetStatus, Partial<Record<AssetAction, AssetS
     mark_damaged: 'damaged',
   },
   nonfunctional: {},
+  lost: {},
 }
 
 export const ACTION_LABELS: Record<AssetAction, string> = {

@@ -12,6 +12,8 @@ import {
   type OffboardingRow,
 } from './api'
 import { OFFBOARDING_REQUIRED_STEPS, offboardingProgress } from './offboardingProgress'
+import { useRegisterAvailable } from '../register/api'
+import { OffboardingReturnSection } from '../register/OffboardingReturnSection'
 
 const COLLECTION_LABELS: Record<AssetCollection, string> = {
   serialized_assets: 'Serialized Assets',
@@ -27,6 +29,9 @@ export function OffboardingTrackPage() {
   const { data: assets } = useEmployeeAssets(record?.employee_name)
   const updateStep = useUpdateOffboardingStep(id ?? '')
   const setOutcome = useSetLaptopOutcome(id ?? '')
+  // The equipment register (20260901000026) replaces the "currently
+  // assigned" list with a per-item return section once it exists.
+  const { data: registerAvailable } = useRegisterAvailable()
   const canEdit = role === 'admin' || role === 'editor'
   const saving = updateStep.isPending || setOutcome.isPending
 
@@ -114,6 +119,9 @@ export function OffboardingTrackPage() {
         </p>
       </div>
 
+      {registerAvailable ? (
+        <OffboardingReturnSection record={record} canEdit={canEdit} />
+      ) : (
       <div>
         <h2 className="mb-2 text-sm font-semibold text-neutral-900 dark:text-neutral-100">
           Assets currently assigned to {record.employee_name}
@@ -127,6 +135,7 @@ export function OffboardingTrackPage() {
           ))}
         </div>
       </div>
+      )}
     </div>
   )
 }

@@ -19,6 +19,8 @@ vi.mock('../assets/api', () => ({
   usePerformLifecycleAction: vi.fn(),
 }))
 vi.mock('../auth/useAuth', () => ({ useAuth: vi.fn() }))
+// Register not present (pre-026 database): the checklist must behave exactly as before.
+vi.mock('../register/api', () => ({ useRegisterAvailable: vi.fn(() => ({ data: false })) }))
 
 const setOutcome = vi.fn()
 const updateStep = vi.fn()

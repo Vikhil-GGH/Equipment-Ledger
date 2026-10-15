@@ -21,6 +21,8 @@ export type AssetStatus =
   | 'damaged'
   | 'decommissioned'
   | 'nonfunctional'
+  /** Final: the device can't be recovered (20260901000025). */
+  | 'lost'
 
 export type AssetAction =
   | 'provide'
@@ -56,6 +58,20 @@ export type BulkAction =
 
 /** Offboarding laptop disposition (20260901000024). */
 export type OffboardingLaptopOutcome = 'received' | 'retained' | 'decommissioned' | 'not_applicable'
+
+/** Onboarding Yes / No / N/A answers; null = not answered yet (20260901000026). */
+export type RequirementAnswer = 'yes' | 'no' | 'not_applicable'
+
+/** Equipment register row status (20260901000026). */
+export type EquipmentIssueStatus =
+  | 'open'
+  | 'returned'
+  | 'returned_damaged'
+  | 'decommissioned'
+  | 'retained_authorized'
+  | 'lost'
+  | 'transferred'
+  | 'unassigned'
 
 // NOTE: Table Row/Insert/Update types are written as inline object literals
 // throughout this file, deliberately not factored into shared named
@@ -544,6 +560,10 @@ export interface Database {
           required_access_provided: boolean
           onboarding_successful: boolean
           assigned_asset_id: string | null
+          employee_id: string | null
+          requested_laptop: string | null
+          charger_required: RequirementAnswer | null
+          headset_required: RequirementAnswer | null
           created_by: string | null
           created_at: string
           updated_at: string
@@ -556,6 +576,10 @@ export interface Database {
           required_access_provided?: boolean
           onboarding_successful?: boolean
           assigned_asset_id?: string | null
+          employee_id?: string | null
+          requested_laptop?: string | null
+          charger_required?: RequirementAnswer | null
+          headset_required?: RequirementAnswer | null
           created_by?: string | null
           created_at?: string
           updated_at?: string
@@ -568,6 +592,10 @@ export interface Database {
           required_access_provided: boolean
           onboarding_successful: boolean
           assigned_asset_id: string | null
+          employee_id: string | null
+          requested_laptop: string | null
+          charger_required: RequirementAnswer | null
+          headset_required: RequirementAnswer | null
           created_by: string | null
           created_at: string
           updated_at: string
@@ -592,6 +620,7 @@ export interface Database {
           laptop_decommissioned: boolean
           laptop_outcome: OffboardingLaptopOutcome | null
           outcome_needs_review: boolean
+          employee_id: string | null
           created_by: string | null
           created_at: string
           updated_at: string
@@ -605,6 +634,7 @@ export interface Database {
           laptop_decommissioned?: boolean
           laptop_outcome?: OffboardingLaptopOutcome | null
           outcome_needs_review?: boolean
+          employee_id?: string | null
           created_by?: string | null
           created_at?: string
           updated_at?: string
@@ -618,14 +648,78 @@ export interface Database {
           laptop_decommissioned: boolean
           laptop_outcome: OffboardingLaptopOutcome | null
           outcome_needs_review: boolean
+          employee_id: string | null
           created_by: string | null
           created_at: string
           updated_at: string
         }>
         Relationships: []
       }
+      employees: {
+        Row: {
+          id: string
+          full_name: string
+          name_key: string | null
+          email: string | null
+          created_by: string | null
+          created_at: string
+        }
+        Insert: { id?: string; full_name: string; email?: string | null; created_by?: string | null; created_at?: string }
+        Update: Partial<{ full_name: string; email: string | null }>
+        Relationships: []
+      }
+      equipment_issues: {
+        Row: {
+          id: string
+          employee_id: string | null
+          assignee_name: string
+          employee_ambiguous: boolean
+          item_kind: 'serialized' | 'bulk'
+          asset_collection: AssetCollection | null
+          asset_id: string | null
+          bulk_item_id: string | null
+          quantity: number
+          description: string
+          serial: string | null
+          issued_at: string
+          issued_by: string | null
+          onboarding_id: string | null
+          status: EquipmentIssueStatus
+          closed_at: string | null
+          closed_by: string | null
+          close_note: string | null
+          approved_by: string | null
+          offboarding_id: string | null
+          source: 'issue' | 'lifecycle' | 'import' | 'backfill' | 'restore'
+          created_at: string
+        }
+        // Written only by the database (trigger + functions).
+        Insert: { [key: string]: never }
+        Update: { [key: string]: never }
+        Relationships: []
+      }
     }
     Views: {
+      employee_possible_duplicates: {
+        Row: {
+          employee_id: string
+          full_name: string
+          other_employee_id: string
+          other_full_name: string
+          reason: string
+        }
+        Relationships: []
+      }
+      equipment_register_mismatches: {
+        Row: {
+          collection: AssetCollection
+          asset_id: string
+          serial: string
+          assigned_to: string | null
+          register_assignee: string | null
+        }
+        Relationships: []
+      }
       serialized_assets_stats: {
         Row: { status: AssetStatus | null; count: number | null }
         Relationships: []
@@ -748,6 +842,38 @@ export interface Database {
         }
         Returns: undefined
       }
+      create_employee: {
+        Args: {
+          [key: string]: unknown
+          p_full_name: string
+          p_email?: string | null
+        }
+        Returns: string
+      }
+      issue_equipment: {
+        Args: {
+          [key: string]: unknown
+          p_employee_id: string
+          p_collection?: AssetCollection | null
+          p_asset_id?: string | null
+          p_bulk_item_id?: string | null
+          p_quantity?: number
+          p_onboarding_id?: string | null
+          p_note?: string | null
+        }
+        Returns: string
+      }
+      return_equipment: {
+        Args: {
+          [key: string]: unknown
+          p_issue_id: string
+          p_outcome: EquipmentIssueStatus
+          p_quantity?: number | null
+          p_note?: string | null
+          p_offboarding_id?: string | null
+        }
+        Returns: string
+      }
     }
     Enums: {
       user_role: UserRole
@@ -757,6 +883,8 @@ export interface Database {
       bulk_bucket: BulkBucket
       bulk_action: BulkAction
       offboarding_laptop_outcome: OffboardingLaptopOutcome
+      requirement_answer: RequirementAnswer
+      equipment_issue_status: EquipmentIssueStatus
     }
   }
 }

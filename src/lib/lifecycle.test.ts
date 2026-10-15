@@ -20,6 +20,7 @@ const EXPECTED: Record<AssetStatus, AssetAction[]> = {
   damaged: ['mark_repaired', 'mark_nonfunctional'],
   decommissioned: ['provide', 'retain', 'mark_damaged'],
   nonfunctional: [],
+  lost: [],
 }
 
 const ALL_ACTIONS: AssetAction[] = [
@@ -59,14 +60,16 @@ describe('decommissioned is not terminal (deliberate design decision)', () => {
   })
 })
 
-describe('nonfunctional is the only terminal state', () => {
-  it('nonfunctional has no actions', () => {
-    expect(isTerminal('nonfunctional')).toBe(true)
-    expect(getAllowedActions('nonfunctional')).toEqual([])
+describe('nonfunctional and lost are the only terminal states', () => {
+  it('nonfunctional and lost have no actions', () => {
+    for (const s of ['nonfunctional', 'lost'] as const) {
+      expect(isTerminal(s)).toBe(true)
+      expect(getAllowedActions(s)).toEqual([])
+    }
   })
 
   for (const status of Object.keys(EXPECTED) as AssetStatus[]) {
-    if (status === 'nonfunctional') continue
+    if (status === 'nonfunctional' || status === 'lost') continue
     it(`'${status}' is not terminal`, () => {
       expect(isTerminal(status)).toBe(false)
     })

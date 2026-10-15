@@ -8,6 +8,7 @@ const COLORS: Record<AssetStatus, string> = {
   damaged: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
   decommissioned: 'bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300',
   nonfunctional: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+  lost: 'bg-rose-200 text-rose-900 dark:bg-rose-900/50 dark:text-rose-200',
 }
 
 export function StatusBadge({

@@ -30,9 +30,14 @@ try {
   // Order matters only for onboarding_checklists.assigned_asset_id, which
   // references active_laptops_np without cascade. History tables cascade
   // from their asset/item tables.
+  // The employee register (20260901000026), when present, goes first: it
+  // references bulk items and checklists. Employees are synthetic data too.
+  const hasRegister = (await db.query(`select to_regclass('public.equipment_issues') is not null as yes`)).rows[0].yes
   for (const table of [
+    ...(hasRegister ? ['equipment_issues'] : []),
     'onboarding_checklists',
     'offboarding_checklists',
+    ...(hasRegister ? ['employees'] : []),
     'import_events',
     'serialized_assets',
     'active_laptops_np',

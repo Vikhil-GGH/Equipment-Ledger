@@ -3,6 +3,8 @@ import { Link, useParams } from 'react-router-dom'
 import { getErrorMessage } from '../../lib/errors'
 import { useAuth } from '../auth/useAuth'
 import { useAsset } from '../assets/api'
+import { useRegisterAvailable } from '../register/api'
+import { OnboardingEquipmentSection } from '../register/OnboardingEquipmentSection'
 import {
   useAssignOnboardingDevice,
   useOnboarding,
@@ -22,6 +24,9 @@ export function OnboardingDetailPage() {
   const { role } = useAuth()
   const { data: record, isLoading, error } = useOnboarding(id)
   const updateStep = useUpdateOnboardingStep(id ?? '')
+  // The equipment register (20260901000026) replaces the single-device
+  // form once it exists; until then this page works exactly as before.
+  const { data: registerAvailable } = useRegisterAvailable()
   const canEdit = role === 'admin' || role === 'editor'
 
   if (isLoading) return <p className="text-sm text-neutral-500">Loading…</p>
@@ -73,7 +78,9 @@ export function OnboardingDetailPage() {
         </ul>
       </div>
 
-      {record.assigned_asset_id ? (
+      {registerAvailable ? (
+        <OnboardingEquipmentSection record={record} canEdit={canEdit} />
+      ) : record.assigned_asset_id ? (
         <AssignedDeviceSummary assetId={record.assigned_asset_id} />
       ) : (
         canEdit && <AssignDeviceForm onboardingId={record.id} />

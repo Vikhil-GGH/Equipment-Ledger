@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
+import type { RequirementAnswer } from '../../types/database.types'
 
 export interface OnboardingRow {
   id: string
@@ -9,6 +10,11 @@ export interface OnboardingRow {
   required_access_provided: boolean
   onboarding_successful: boolean
   assigned_asset_id: string | null
+  // Present once the employee register (20260901000026) exists.
+  employee_id?: string | null
+  requested_laptop?: string | null
+  charger_required?: RequirementAnswer | null
+  headset_required?: RequirementAnswer | null
   created_at: string
   updated_at: string
 }
@@ -50,10 +56,19 @@ export function useOnboarding(id: string | undefined) {
 export function useCreateOnboarding() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async ({ employeeName, createdBy }: { employeeName: string; createdBy: string }) => {
+    mutationFn: async ({
+      employeeName,
+      createdBy,
+      employeeId,
+    }: {
+      employeeName: string
+      createdBy: string
+      /** Only sent when the employee register (20260901000026) exists. */
+      employeeId?: string | null
+    }) => {
       const { data, error } = await supabase
         .from('onboarding_checklists')
-        .insert({ employee_name: employeeName, created_by: createdBy })
+        .insert({ employee_name: employeeName, created_by: createdBy, ...(employeeId ? { employee_id: employeeId } : {}) })
         .select('id')
         .single()
       if (error) throw error

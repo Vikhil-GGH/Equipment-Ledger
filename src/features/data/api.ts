@@ -21,6 +21,9 @@ const BACKUP_TABLES = [
   'import_events',
 ] as const
 
+// Added by 20260901000026; skipped when the connected database predates it.
+const OPTIONAL_BACKUP_TABLES = ['employees', 'equipment_issues'] as const
+
 export interface BackupFile {
   exported_at: string
   tables: Record<(typeof BACKUP_TABLES)[number], unknown[]>
@@ -37,6 +40,12 @@ export function useExportBackup() {
         if (result.error) throw result.error
         tables[BACKUP_TABLES[i]] = (result.data ?? []) as unknown[]
       })
+      for (const table of OPTIONAL_BACKUP_TABLES) {
+        const { data, error } = await supabase.from(table).select('*')
+        if (error && (error.code === 'PGRST205' || error.code === '42P01')) continue
+        if (error) throw error
+        ;(tables as Record<string, unknown[]>)[table] = data ?? []
+      }
       return { exported_at: new Date().toISOString(), tables }
     },
   })
