@@ -65,13 +65,14 @@ export function useCreateOnboarding() {
   })
 }
 
-const STEP_COLUMNS = [
+/** The four checklist steps, in display order. */
+export const ONBOARDING_STEPS = [
   'identity_created',
   'equipment_assigned',
   'required_access_provided',
   'onboarding_successful',
 ] as const
-export type OnboardingStep = (typeof STEP_COLUMNS)[number]
+export type OnboardingStep = (typeof ONBOARDING_STEPS)[number]
 
 export function useUpdateOnboardingStep(id: string) {
   const queryClient = useQueryClient()
@@ -111,6 +112,8 @@ export function useAssignOnboardingDevice(id: string) {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['onboarding', 'detail', id] })
+      // Assigning ticks "Equipment assigned", so the list's progress changes too.
+      void queryClient.invalidateQueries({ queryKey: ['onboarding', 'list'] })
       void queryClient.invalidateQueries({ queryKey: ['assets', 'active_laptops_np'] })
       void queryClient.invalidateQueries({ queryKey: ['stats', 'active_laptops_np'] })
     },
