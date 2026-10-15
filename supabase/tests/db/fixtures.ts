@@ -26,6 +26,17 @@ export const LEDGER_TABLES = [
   'import_events',
 ] as const
 
+/**
+ * LEDGER_TABLES plus the tables 20260901000026 added, when present — what a
+ * full backup contains. (Staging may run these tests before 026 exists.)
+ */
+export async function backupTables(db: Db): Promise<string[]> {
+  const { rows } = await db.query<{ t: string }>(
+    `select t from unnest(array['employees', 'equipment_issues']) t where to_regclass('public.' || t) is not null`,
+  )
+  return [...LEDGER_TABLES, ...rows.map((r) => r.t)]
+}
+
 export const ASSET_TABLES = ['serialized_assets', 'active_laptops_np', 'monitors', 'other_equipment'] as const
 
 export const STATS_VIEWS = [

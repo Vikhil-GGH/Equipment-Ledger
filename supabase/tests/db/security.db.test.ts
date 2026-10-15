@@ -42,6 +42,7 @@ import {
   STATS_VIEWS,
   VIEWER,
   addAnonymousUser,
+  backupTables,
   ensureLegacyAnonymousProfile,
   rpc,
   seedLedger,
@@ -486,15 +487,16 @@ describe('4. legitimate workflows still work', () => {
     await inRolledBackTx(db, async () => {
       await setup()
       await actAsDatabase(db)
+      const tables = await backupTables(db)
       const before: Record<string, string> = {}
-      for (const t of LEDGER_TABLES) before[t] = await tableHash(db, t)
+      for (const t of tables) before[t] = await tableHash(db, t)
 
       // Export as the Data page does — every row of every table, read as the
       // admin through RLS. Serialized in SQL (to_jsonb) so timestamps keep
       // their microseconds, the way PostgREST returns them to the app.
       await actAs(db, ADMIN)
       const payload: Record<string, unknown> = {}
-      for (const t of LEDGER_TABLES) {
+      for (const t of tables) {
         const { rows } = await db.query<{ rows: unknown }>(
           `select coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) as rows from ${t} t`,
         )
@@ -503,7 +505,7 @@ describe('4. legitimate workflows still work', () => {
       await rpc(db, `restore_backup($1::jsonb)`, [JSON.stringify(payload)])
 
       await actAsDatabase(db)
-      for (const t of LEDGER_TABLES) expect(await tableHash(db, t), t).toBe(before[t])
+      for (const t of tables) expect(await tableHash(db, t), t).toBe(before[t])
     })
   })
 
@@ -556,14 +558,19 @@ describe('4. legitimate workflows still work', () => {
     })
   })
 
-  it('KNOWN PRE-EXISTING BUG C2 (not fixed on this branch): collecting an onboarding-assigned inventory laptop fails', async () => {
+  it('C2: collecting an onboarding-assigned inventory laptop fails before 026 and works after it', async () => {
     await inRolledBackTx(db, async () => {
       await setup()
       await actAs(db, ADMIN)
       await rpc(db, `onboarding_assign_device($1, 'ZZ-SECTEST-INV-1')`, [ids.onboarding])
       expect(
         await errorOf(db, `select perform_lifecycle_action('active_laptops_np', $1, 'collect')`, [ids.inventoryLaptop]),
-      ).toMatch(/foreign key/)
+      ).toEqual(
+        // 20260901000026 removed the foreign key that caused C2.
+        (await db.query(`select to_regclass('public.equipment_issues') is not null as fixed`)).rows[0].fixed
+          ? null
+          : expect.stringMatching(/foreign key/),
+      )
     })
   })
 })

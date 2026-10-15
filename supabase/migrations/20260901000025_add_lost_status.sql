@@ -1,0 +1,12 @@
+-- Lost: a distinct, final status for a serialized device that can't be
+-- recovered. Reached only through return_equipment (20260901000026), which
+-- unassigns the device and records the reason in its history. Like
+-- 'nonfunctional', no lifecycle action leaves it — perform_lifecycle_action
+-- has no transition from 'lost', so it already rejects every action.
+--
+-- Its own migration file because ALTER TYPE ... ADD VALUE must commit
+-- before the new value can be used (same pattern as 015 and 018).
+-- Rollback: supabase/rollback/20260901000025_down.sql
+-- "if not exists" so the migration can be re-applied after its rollback
+-- (which cannot remove an enum value).
+alter type asset_status add value if not exists 'lost';
