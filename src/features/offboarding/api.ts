@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
-import type { AssetCollection, AssetStatus } from '../../types/database.types'
+import type { AssetCollection, AssetStatus, OffboardingLaptopOutcome } from '../../types/database.types'
 
 export interface OffboardingRow {
   id: string
@@ -9,6 +9,10 @@ export interface OffboardingRow {
   laptop_received: boolean
   laptop_retained: boolean
   laptop_decommissioned: boolean
+  /** The single laptop disposition (null = not chosen yet). Authoritative. */
+  laptop_outcome: OffboardingLaptopOutcome | null
+  /** Legacy record had more than one laptop flag ticked; resolved by choosing an outcome. */
+  outcome_needs_review: boolean
   created_at: string
   updated_at: string
 }
@@ -65,14 +69,19 @@ export function useCreateOffboarding() {
   })
 }
 
-/** The offboarding checklist steps, in display order. */
-export const OFFBOARDING_STEPS = [
-  'removed_access',
-  'laptop_received',
-  'laptop_retained',
-  'laptop_decommissioned',
-] as const
-export type OffboardingStep = (typeof OFFBOARDING_STEPS)[number]
+/**
+ * Since 20260901000024 the checklist is: Removed access (a tick box) plus
+ * ONE laptop outcome. The legacy laptop_* booleans are kept in sync by the
+ * database and are never written by this app any more.
+ */
+export type OffboardingStep = 'removed_access'
+
+export const LAPTOP_OUTCOMES: { value: OffboardingLaptopOutcome; label: string; hint: string }[] = [
+  { value: 'received', label: 'Laptop received', hint: 'The employee handed the laptop back.' },
+  { value: 'retained', label: 'Laptop retained', hint: 'The employee keeps the laptop (approved).' },
+  { value: 'decommissioned', label: 'Laptop decommissioned', hint: 'The laptop is being decommissioned.' },
+  { value: 'not_applicable', label: 'Not applicable', hint: 'The employee had no company laptop.' },
+]
 
 export function useUpdateOffboardingStep(id: string) {
   const queryClient = useQueryClient()
@@ -82,6 +91,25 @@ export function useUpdateOffboardingStep(id: string) {
         .from('offboarding_checklists')
         .update({ [step]: value } as Partial<Record<OffboardingStep, boolean>>)
         .eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['offboarding', 'detail', id] })
+      void queryClient.invalidateQueries({ queryKey: ['offboarding', 'list'] })
+    },
+  })
+}
+
+/**
+ * Records the laptop outcome — paperwork only. It changes no equipment
+ * record: collecting or decommissioning the device stays an explicit
+ * action on the asset itself.
+ */
+export function useSetLaptopOutcome(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (outcome: OffboardingLaptopOutcome | null) => {
+      const { error } = await supabase.from('offboarding_checklists').update({ laptop_outcome: outcome }).eq('id', id)
       if (error) throw error
     },
     onSuccess: () => {

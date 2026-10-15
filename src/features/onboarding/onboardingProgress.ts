@@ -3,6 +3,7 @@ import {
   DEFAULT_CHECKLIST_SORT,
   checklistStatus,
   countCompleted,
+  progressFromSteps,
   sortChecklistRows,
   type ChecklistSortKey,
   type ChecklistStatus,
@@ -18,6 +19,7 @@ export type { SortDirection }
 export const TOTAL_ONBOARDING_STEPS = ONBOARDING_STEPS.length
 export const ONBOARDING_STATUS_LABELS = CHECKLIST_STATUS_LABELS
 export const DEFAULT_ONBOARDING_SORT = DEFAULT_CHECKLIST_SORT
+export const onboardingProgress = progressFromSteps<OnboardingRow, (typeof ONBOARDING_STEPS)[number]>(ONBOARDING_STEPS)
 
 type StepFields = Pick<OnboardingRow, (typeof ONBOARDING_STEPS)[number]>
 
@@ -34,5 +36,5 @@ export function sortOnboardingRows(
   key: OnboardingSortKey,
   direction: SortDirection,
 ): OnboardingRow[] {
-  return sortChecklistRows(rows, ONBOARDING_STEPS, key, direction)
+  return sortChecklistRows(rows, onboardingProgress, key, direction)
 }

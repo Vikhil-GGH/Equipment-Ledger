@@ -4,7 +4,8 @@ import { ChecklistListView } from '../../components/ChecklistListView'
 import { Modal } from '../../components/Modal'
 import { getErrorMessage } from '../../lib/errors'
 import { useAuth } from '../auth/useAuth'
-import { ONBOARDING_STEPS, useCreateOnboarding, useOnboardingList } from './api'
+import { useCreateOnboarding, useOnboardingList } from './api'
+import { onboardingProgress } from './onboardingProgress'
 
 export function OnboardingListPage() {
   const { role, user } = useAuth()
@@ -22,7 +23,7 @@ export function OnboardingListPage() {
         error={error}
         search={search}
         onSearchChange={setSearch}
-        steps={ONBOARDING_STEPS}
+        progress={onboardingProgress}
         detailPath={(id) => `/onboarding/${id}`}
         progressLabel="onboarding progress"
         emptyMessage="No onboarding records yet."

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checklistStatus, countCompleted, sortChecklistRows } from './checklistProgress'
+import { checklistStatus, countCompleted, progressFromSteps, sortChecklistRows } from './checklistProgress'
 
 describe('checklist progress uses the workflow’s own step count', () => {
   const steps3 = ['a', 'b', 'c'] as const
@@ -37,7 +37,8 @@ describe('checklist progress uses the workflow’s own step count', () => {
       { id: '2', employee_name: 'B', created_at: '2026-10-14', a: true, b: true, c: true },
       { id: '3', employee_name: 'C', created_at: '2026-10-15', a: false, b: false, c: false },
     ]
-    expect(sortChecklistRows(rows, steps3, 'progress', 'asc').map((r) => r.id)).toEqual(['3', '1', '2'])
-    expect(sortChecklistRows(rows, steps3, 'status', 'desc').map((r) => r.id)).toEqual(['2', '1', '3'])
+    const progress = progressFromSteps<(typeof rows)[number], 'a' | 'b' | 'c'>(steps3)
+    expect(sortChecklistRows(rows, progress, 'progress', 'asc').map((r) => r.id)).toEqual(['3', '1', '2'])
+    expect(sortChecklistRows(rows, progress, 'status', 'desc').map((r) => r.id)).toEqual(['2', '1', '3'])
   })
 })

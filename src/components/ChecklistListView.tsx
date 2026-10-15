@@ -5,9 +5,9 @@ import {
   CHECKLIST_STATUS_LABELS,
   DEFAULT_CHECKLIST_SORT,
   checklistStatus,
-  countCompleted,
   sortChecklistRows,
   type ChecklistRecord,
+  type ProgressFn,
   type ChecklistSortKey,
   type ChecklistStatus,
   type SortDirection,
@@ -38,17 +38,18 @@ const COLUMNS: { key: ChecklistSortKey; label: string; className?: string }[] = 
  * The shared list view for step checklists (Onboarding, Offboarding):
  * search, status filter with counts, sortable columns, derived status and
  * progress, and rows that open the checklist. Each page supplies its own
- * data, step list and "Start …" action, so the two stay identical in look
- * and behaviour without duplicating the table.
+ * data, progress rule and "Start …" action, so the two stay identical in
+ * look and behaviour without duplicating the table.
  */
-export function ChecklistListView<T extends ChecklistRecord, K extends keyof T>({
+export function ChecklistListView<T extends ChecklistRecord>({
   title,
   records,
   isLoading,
   error,
   search,
   onSearchChange,
-  steps,
+  progress,
+  flag,
   detailPath,
   startAction,
   progressLabel,
@@ -60,8 +61,10 @@ export function ChecklistListView<T extends ChecklistRecord, K extends keyof T>(
   error: unknown
   search: string
   onSearchChange: (value: string) => void
-  /** The workflow's checklist step columns — the step total comes from this. */
-  steps: readonly K[]
+  /** The workflow's rule for required steps done / total. */
+  progress: ProgressFn<T>
+  /** Optional short warning shown under a row's status (e.g. "Needs review"). */
+  flag?: (record: T) => string | null
   detailPath: (id: string) => string
   startAction?: ReactNode
   /** e.g. "onboarding progress" — used for the progress bar's accessible name. */
@@ -71,25 +74,25 @@ export function ChecklistListView<T extends ChecklistRecord, K extends keyof T>(
   const navigate = useNavigate()
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [sort, setSort] = useState(DEFAULT_CHECKLIST_SORT)
-  const total = steps.length
-
   // Status is derived from the checklist on every render, so it changes as
   // soon as the list refetches after a step is ticked or unticked.
   const counts = useMemo(() => {
     const c: Record<StatusFilter, number> = { all: 0, not_started: 0, pending: 0, completed: 0 }
     for (const r of records ?? []) {
+      const p = progress(r)
       c.all++
-      c[checklistStatus(countCompleted(r, steps), total)]++
+      c[checklistStatus(p.done, p.total)]++
     }
     return c
-  }, [records, steps, total])
+  }, [records, progress])
 
   const rows = useMemo(() => {
-    const filtered = (records ?? []).filter(
-      (r) => statusFilter === 'all' || checklistStatus(countCompleted(r, steps), total) === statusFilter,
-    )
-    return sortChecklistRows(filtered, steps, sort.key, sort.direction)
-  }, [records, statusFilter, sort, steps, total])
+    const filtered = (records ?? []).filter((r) => {
+      const p = progress(r)
+      return statusFilter === 'all' || checklistStatus(p.done, p.total) === statusFilter
+    })
+    return sortChecklistRows(filtered, progress, sort.key, sort.direction)
+  }, [records, statusFilter, sort, progress])
 
   function toggleSort(key: ChecklistSortKey) {
     setSort((current) =>
@@ -180,8 +183,9 @@ export function ChecklistListView<T extends ChecklistRecord, K extends keyof T>(
             </thead>
             <tbody>
               {rows.map((record) => {
-                const done = countCompleted(record, steps)
+                const { done, total } = progress(record)
                 const status = checklistStatus(done, total)
+                const warning = flag?.(record)
                 return (
                   <tr
                     key={record.id}
@@ -227,6 +231,11 @@ export function ChecklistListView<T extends ChecklistRecord, K extends keyof T>(
                       >
                         {CHECKLIST_STATUS_LABELS[status]}
                       </span>
+                      {warning && (
+                        <span className="mt-1 block text-xs font-medium text-amber-700 dark:text-amber-400">
+                          ⚠ {warning}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <Link

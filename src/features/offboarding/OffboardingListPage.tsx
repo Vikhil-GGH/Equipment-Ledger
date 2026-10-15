@@ -4,7 +4,8 @@ import { ChecklistListView } from '../../components/ChecklistListView'
 import { Modal } from '../../components/Modal'
 import { getErrorMessage } from '../../lib/errors'
 import { useAuth } from '../auth/useAuth'
-import { OFFBOARDING_STEPS, useCreateOffboarding, useOffboardingList } from './api'
+import { useCreateOffboarding, useOffboardingList } from './api'
+import { offboardingFlag, offboardingProgress } from './offboardingProgress'
 
 export function OffboardingListPage() {
   const { role, user } = useAuth()
@@ -25,7 +26,8 @@ export function OffboardingListPage() {
         error={error}
         search={search}
         onSearchChange={setSearch}
-        steps={OFFBOARDING_STEPS}
+        progress={offboardingProgress}
+        flag={offboardingFlag}
         detailPath={(id) => `/offboarding/${id}`}
         progressLabel="offboarding progress"
         emptyMessage="No offboarding records yet."

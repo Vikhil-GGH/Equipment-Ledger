@@ -54,6 +54,9 @@ export type BulkAction =
   | 'repair'
   | 'decommission'
 
+/** Offboarding laptop disposition (20260901000024). */
+export type OffboardingLaptopOutcome = 'received' | 'retained' | 'decommissioned' | 'not_applicable'
+
 // NOTE: Table Row/Insert/Update types are written as inline object literals
 // throughout this file, deliberately not factored into shared named
 // interfaces (even though serialized_assets/active_laptops_np and their
@@ -587,6 +590,8 @@ export interface Database {
           laptop_received: boolean
           laptop_retained: boolean
           laptop_decommissioned: boolean
+          laptop_outcome: OffboardingLaptopOutcome | null
+          outcome_needs_review: boolean
           created_by: string | null
           created_at: string
           updated_at: string
@@ -598,6 +603,8 @@ export interface Database {
           laptop_received?: boolean
           laptop_retained?: boolean
           laptop_decommissioned?: boolean
+          laptop_outcome?: OffboardingLaptopOutcome | null
+          outcome_needs_review?: boolean
           created_by?: string | null
           created_at?: string
           updated_at?: string
@@ -609,6 +616,8 @@ export interface Database {
           laptop_received: boolean
           laptop_retained: boolean
           laptop_decommissioned: boolean
+          laptop_outcome: OffboardingLaptopOutcome | null
+          outcome_needs_review: boolean
           created_by: string | null
           created_at: string
           updated_at: string
@@ -747,6 +756,7 @@ export interface Database {
       asset_collection: AssetCollection
       bulk_bucket: BulkBucket
       bulk_action: BulkAction
+      offboarding_laptop_outcome: OffboardingLaptopOutcome
     }
   }
 }

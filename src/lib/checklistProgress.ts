@@ -1,8 +1,9 @@
 /**
- * Progress for a step checklist (onboarding, offboarding). Status is always
- * derived from the checklist's own boolean step columns — never stored —
- * so it can't drift from the checklist, and the step count comes from the
- * workflow's step list rather than being assumed.
+ * Progress for a checklist (onboarding, offboarding). Status is always
+ * derived from the checklist record itself — never stored — so it can't
+ * drift, and each workflow supplies its own rule for what counts as a
+ * required step (Onboarding: four step columns; Offboarding: access
+ * removed + one laptop outcome).
  */
 export type ChecklistStatus = 'not_started' | 'pending' | 'completed'
 
@@ -25,6 +26,17 @@ export function countCompleted<T, K extends keyof T>(record: T, steps: readonly 
   return steps.filter((step) => record[step] === true).length
 }
 
+export interface Progress {
+  done: number
+  total: number
+}
+export type ProgressFn<T> = (record: T) => Progress
+
+/** Progress rule for a checklist whose required steps are boolean columns. */
+export function progressFromSteps<T, K extends keyof T>(steps: readonly K[]): ProgressFn<T> {
+  return (record) => ({ done: countCompleted(record, steps), total: steps.length })
+}
+
 export function checklistStatus(done: number, total: number): ChecklistStatus {
   if (done <= 0) return 'not_started'
   if (done >= total) return 'completed'
@@ -40,21 +52,23 @@ export const DEFAULT_CHECKLIST_SORT: { key: ChecklistSortKey; direction: SortDir
   direction: 'desc',
 }
 
-export function sortChecklistRows<T extends ChecklistRecord, K extends keyof T>(
+export function sortChecklistRows<T extends ChecklistRecord>(
   rows: T[],
-  steps: readonly K[],
+  progressOf: ProgressFn<T>,
   key: ChecklistSortKey,
   direction: SortDirection,
 ): T[] {
   const sign = direction === 'asc' ? 1 : -1
-  const done = (r: T) => countCompleted(r, steps)
+  const rank = (r: T) => {
+    const p = progressOf(r)
+    return STATUS_RANK[checklistStatus(p.done, p.total)]
+  }
   const byStarted = (a: T, b: T) => a.created_at.localeCompare(b.created_at)
   const compare: Record<ChecklistSortKey, (a: T, b: T) => number> = {
     name: (a, b) => a.employee_name.localeCompare(b.employee_name, undefined, { sensitivity: 'base', numeric: true }),
     started: byStarted,
-    progress: (a, b) => done(a) - done(b),
-    status: (a, b) =>
-      STATUS_RANK[checklistStatus(done(a), steps.length)] - STATUS_RANK[checklistStatus(done(b), steps.length)],
+    progress: (a, b) => progressOf(a).done - progressOf(b).done,
+    status: (a, b) => rank(a) - rank(b),
   }
   // Ties fall back to most recently started first, whatever the main order.
   return [...rows].sort((a, b) => sign * compare[key](a, b) || -byStarted(a, b))
