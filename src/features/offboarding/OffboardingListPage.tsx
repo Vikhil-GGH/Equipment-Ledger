@@ -1,71 +1,46 @@
 import { useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
+import { ChecklistListView } from '../../components/ChecklistListView'
 import { Modal } from '../../components/Modal'
 import { getErrorMessage } from '../../lib/errors'
 import { useAuth } from '../auth/useAuth'
-import { useCreateOffboarding, useOffboardingList } from './api'
+import { OFFBOARDING_STEPS, useCreateOffboarding, useOffboardingList } from './api'
 
 export function OffboardingListPage() {
   const { role, user } = useAuth()
   const [search, setSearch] = useState('')
   const [showStart, setShowStart] = useState(false)
-  const { data: records, isLoading } = useOffboardingList(search)
+  const { data: records, isLoading, error } = useOffboardingList(search)
   const canStart = role === 'admin' || role === 'editor'
 
+  // Same table as Onboarding. Ticking checklist steps here only tracks the
+  // paperwork — it never collects equipment (that stays an explicit action
+  // on each asset, from the employee's checklist page).
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
-          Offboarding
-        </h1>
-        <div className="flex gap-2">
-          <input
-            placeholder="Search employee…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="input sm:w-64"
-          />
-          {canStart && (
+    <>
+      <ChecklistListView
+        title="Offboarding"
+        records={records}
+        isLoading={isLoading}
+        error={error}
+        search={search}
+        onSearchChange={setSearch}
+        steps={OFFBOARDING_STEPS}
+        detailPath={(id) => `/offboarding/${id}`}
+        progressLabel="offboarding progress"
+        emptyMessage="No offboarding records yet."
+        startAction={
+          canStart && (
             <button className="btn-primary whitespace-nowrap" onClick={() => setShowStart(true)}>
               Start offboarding
             </button>
-          )}
-        </div>
-      </div>
-
-      {isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
-      {!isLoading && records?.length === 0 && (
-        <p className="text-sm text-neutral-500">No offboarding records yet.</p>
-      )}
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {records?.map((record) => {
-          const stepsDone = [
-            record.removed_access,
-            record.laptop_received,
-            record.laptop_retained,
-            record.laptop_decommissioned,
-          ].filter(Boolean).length
-          return (
-            <Link key={record.id} to={`/offboarding/${record.id}`} className="card block">
-              <div className="flex items-center justify-between">
-                <p className="font-medium text-neutral-900 dark:text-neutral-100">
-                  {record.employee_name}
-                </p>
-                <span className="text-xs text-neutral-500">{stepsDone}/4 steps</span>
-              </div>
-              <p className="mt-1 text-xs text-neutral-500">
-                Started {new Date(record.created_at).toLocaleDateString()}
-              </p>
-            </Link>
           )
-        })}
-      </div>
-
+        }
+      />
       {showStart && user && (
         <StartOffboardingModal userId={user.id} onClose={() => setShowStart(false)} />
       )}
-    </div>
+    </>
   )
 }
 

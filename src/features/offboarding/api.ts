@@ -65,13 +65,14 @@ export function useCreateOffboarding() {
   })
 }
 
-const STEP_COLUMNS = [
+/** The offboarding checklist steps, in display order. */
+export const OFFBOARDING_STEPS = [
   'removed_access',
   'laptop_received',
   'laptop_retained',
   'laptop_decommissioned',
 ] as const
-export type OffboardingStep = (typeof STEP_COLUMNS)[number]
+export type OffboardingStep = (typeof OFFBOARDING_STEPS)[number]
 
 export function useUpdateOffboardingStep(id: string) {
   const queryClient = useQueryClient()
