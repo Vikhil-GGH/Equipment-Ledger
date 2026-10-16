@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { fetchAllRows, IncompleteReadError, type PagedSource } from '../../lib/fetchAllRows'
-import { exportBackup } from './api'
+import { exportBackup } from './exportBackup'
 import { BACKUP_TABLES, restorePayload, validateBackupFile, type BackupFile } from './backupFile'
 
 type Row = { id: string; [k: string]: unknown }

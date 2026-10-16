@@ -11,14 +11,22 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { actAs, actAsDatabase, errorOf, inRolledBackTx, isStaging, openDb, tableHash, type Db } from './harness'
 import { ADMIN, EDITOR, backupTables, rpc, seedLedger, seedUsers } from './fixtures'
+import { createClient } from '@supabase/supabase-js'
+import type { PagedSource } from '../../../src/lib/fetchAllRows'
+import { exportBackup } from '../../../src/features/data/exportBackup'
+import { restorePayload, validateBackupFile } from '../../../src/features/data/backupFile'
+// @ts-expect-error — plain .mjs helper shared with the other staging scripts
+import { loadStagingEnv } from '../../../scripts/staging/lib.mjs'
 
 let db: Db
 let db2: Db
+let env: Record<string, string>
 const one = async <T = Record<string, any>>(sql: string, params: unknown[] = []) => (await db.query<T>(sql, params)).rows[0]
 const tag = `ZZ-INT-${Date.now().toString(36).toUpperCase()}`
 
 beforeAll(async () => {
   if (!isStaging) return
+  env = loadStagingEnv(['STAGING_ADMIN_EMAIL', 'STAGING_ADMIN_PASSWORD']) as Record<string, string>
   db = await openDb()
   db2 = await openDb()
 })
@@ -62,41 +70,95 @@ describe.skipIf(!isStaging)('inventory integrity on the live staging database (r
     })
   })
 
-  it('concurrency: a second transaction creating the same normalized serial waits for the first and cannot slip past it', async () => {
+  it('concurrency: two connections create the same normalized serial at once — exactly one succeeds, the other is rejected and leaves nothing', async () => {
     const serial = `${tag}-RACE`
     const insert = (conn: Db, s: string) =>
-      conn.query(`insert into monitors (name, category, serial) values ('ZZ Race Monitor', 'Monitor', $1) returning id`, [s])
+      conn.query<{ id: string }>(`insert into monitors (name, category, serial) values ('ZZ Race Monitor', 'Monitor', $1) returning id`, [s])
+    const traces = async (conn: Db) =>
+      (
+        await conn.query<{ devices: number; keys: number }>(
+          `select (select count(*) from monitors where normalize_serial(serial) = $1)::int as devices,
+                  (select count(*) from serial_keys where serial_key = $1)::int as keys`,
+          [serial.toUpperCase()],
+        )
+      ).rows[0]
     await db.exec('begin')
     await db2.exec('begin')
     try {
       await actAsDatabase(db)
       await actAsDatabase(db2)
-      await insert(db, serial) // holds the key, uncommitted
-      await db2.exec(`set local lock_timeout = '2s'`)
-      // db2's pre-check can't see db's uncommitted row, so it reaches the
-      // registry insert, where the unique index makes it wait for db.
-      await expect(insert(db2, ` ${serial.toLowerCase()} `)).rejects.toThrow(/lock timeout|canceling statement/)
+      // Connection 1 creates the device (not committed yet).
+      const first = await insert(db, serial)
+      expect(first.rows).toHaveLength(1)
+      expect(await traces(db)).toEqual({ devices: 1, keys: 1 })
+      // Connection 2 tries the same serial typed differently. Its pre-check
+      // can't see connection 1's uncommitted row, so it reaches the
+      // registry's unique index — which holds it until connection 1
+      // finishes. Bounded here so the test can never hang.
+      await db2.exec(`set local lock_timeout = '3s'`)
+      const started = Date.now()
+      const second = await insert(db2, ` ${serial.toLowerCase()} `).then(
+        () => null,
+        (err: Error) => err.message,
+      )
+      expect(second).toMatch(/lock timeout/)
+      expect(Date.now() - started).toBeGreaterThanOrEqual(2_500) // it really waited on connection 1
     } finally {
       await db2.exec('rollback')
       await db.exec('rollback')
     }
-    expect((await one(`select count(*)::int as n from serial_keys where serial_key = $1`, [serial.toUpperCase()])).n).toBe(0)
+    // Connection 2 never wrote anything; connection 1 was rolled back.
+    expect(await traces(db)).toEqual({ devices: 0, keys: 0 })
+    expect(await traces(db2)).toEqual({ devices: 0, keys: 0 })
   })
 
-  it('restore with verified counts round-trips the live data exactly (rolled back)', async () => {
+  it('once a serial exists (visible), a later create gets a clear duplicate error and leaves no partial rows', async () => {
+    // Connection 1's device must be visible to connection 2 without
+    // committing anything to staging, so both steps run on ONE connection
+    // through a savepoint — the same code path a second transaction takes
+    // after the first commits (pre-check sees the row → clean rejection).
     await inRolledBackTx(db, async () => {
-      await seedUsers(db)
-      const tables = await backupTables(db)
-      const payload: Record<string, any> = {}
-      for (const t of tables) payload[t] = (await one(`select coalesce(jsonb_agg(to_jsonb(x) order by x.id), '[]') as v from ${t} x`)).v
-      payload._counts = Object.fromEntries(tables.map((t) => [t, payload[t].length]))
-      const before: Record<string, string> = {}
-      for (const t of tables) before[t] = await tableHash(db, t)
-      await actAs(db, ADMIN)
-      const result = await rpc<Record<string, any>>(db, `restore_backup($1::jsonb)`, [JSON.stringify(payload)])
-      expect(result.counts).toEqual(payload._counts)
       await actAsDatabase(db)
-      for (const t of tables) expect(await tableHash(db, t), t).toBe(before[t])
+      await db.query(`insert into monitors (name, category, serial) values ('ZZ Race Monitor', 'Monitor', $1)`, [`${tag}-RACE2`])
+      const err = await errorOf(db, `insert into monitors (name, category, serial) values ('ZZ Race Monitor', 'Monitor', $1)`, [`${tag.toLowerCase()}-race2`])
+      expect(err).toMatch(/already exists/)
+      const r = await one(`select (select count(*) from monitors where normalize_serial(serial) = $1)::int as d, (select count(*) from serial_keys where serial_key = $1)::int as k`, [`${tag}-RACE2`])
+      expect(r).toEqual({ d: 1, k: 1 })
     })
   })
+
+  it('the app paginated export through the real API is complete, and restoring that exact file round-trips the data (rolled back)', async () => {
+    // Read-only export, signed in as the staging admin, with the app's own code.
+    const opts = { auth: { persistSession: false, autoRefreshToken: false } }
+    const api = createClient(env.VITE_STAGING_SUPABASE_URL, env.VITE_STAGING_SUPABASE_ANON_KEY, opts)
+    const { error } = await api.auth.signInWithPassword({ email: env.STAGING_ADMIN_EMAIL, password: env.STAGING_ADMIN_PASSWORD })
+    if (error) throw error
+    const backup = await exportBackup(api as unknown as PagedSource)
+    await api.auth.signOut()
+
+    const tables = await backupTables(db)
+    expect(Object.keys(backup.tables).sort()).toEqual([...tables].sort())
+    expect(tables).toEqual(expect.arrayContaining(['employees', 'equipment_issues', 'serialized_asset_history', 'active_laptops_np_history', 'monitors_history', 'other_equipment_history', 'bulk_item_history']))
+    const dbCounts: Record<string, number> = {}
+    for (const t of tables) dbCounts[t] = (await one<{ n: number }>(`select count(*)::int as n from ${t}`)).n
+    expect(backup.counts).toEqual(dbCounts)
+    const report = Object.entries(dbCounts).map(([t, n]) => `${t}=${n}`).join(' ')
+    console.log(`export counts (database = file): ${report}`)
+    expect(validateBackupFile(JSON.parse(JSON.stringify(backup))).verified).toBe(true)
+
+    await inRolledBackTx(db, async () => {
+      await seedUsers(db)
+      const before: Record<string, string> = {}
+      for (const t of tables) before[t] = await tableHash(db, t)
+      const register = await tableHash(db, 'equipment_issues')
+      await actAs(db, ADMIN)
+      const result = await rpc<Record<string, any>>(db, `restore_backup($1::jsonb)`, [JSON.stringify(restorePayload(backup))])
+      expect(result.counts).toEqual(dbCounts)
+      expect(result.register_mismatches).toBe(0)
+      await actAsDatabase(db)
+      for (const t of tables) expect(await tableHash(db, t), t).toBe(before[t])
+      expect(await tableHash(db, 'equipment_issues')).toBe(register)
+      expect((await one(`select count(*)::int as n from (select asset_id from equipment_issues where status = 'open' group by 1 having count(*) > 1) x`)).n).toBe(0)
+    })
+  }, 300_000)
 })

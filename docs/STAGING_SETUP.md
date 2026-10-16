@@ -416,9 +416,9 @@ Send me (none of these contain secrets or real personal data):
 
 Applied to staging on 2026-10-15 after a verified snapshot (`staging-pre-025`); the snapshot comparison showed every pre-existing row and column unchanged. To repeat on a fresh staging project: `npm run staging:migrate` (it applies 025 then 026 after 024), then `npm run staging:test-db` and `npm run staging:verify`. Browser checks: [STAGING_APP_TESTING.md](STAGING_APP_TESTING.md) sections 11–12.
 
-## Migration 027 on staging (inventory integrity) — not applied yet
+## Migration 027 on staging (inventory integrity)
 
-Prepared locally; **not applied to hosted staging** until approved. It adds one-device-per-serial checks (existing duplicates are kept and listed for review under Access & Roles), makes Excel imports unable to change status or assignment, and makes restore verify row counts. Rollback: `supabase/rollback/20260901000027_down.sql` (run before `20260901000026_down.sql`). After applying: `npm run staging:test-db` (includes the two-connection concurrency test) and `npm run staging:verify`; browser checks in [STAGING_APP_TESTING.md](STAGING_APP_TESTING.md) 9.3–9.17 and 13.1–13.6 — regenerate the Excel files first with `npm run staging:test-files`.
+Applied to staging on 2026-10-16 after a verified snapshot (`staging-pre-027`, also restored into a disposable database to prove it is recoverable); the comparison showed every pre-existing row and column unchanged, with only the new `serial_keys` table added. It adds one-device-per-serial checks (existing duplicates are kept and listed for review under Access & Roles), makes Excel imports unable to change status or assignment, and makes restore verify row counts. Rollback: `supabase/rollback/20260901000027_down.sql` (run before `20260901000026_down.sql`). After applying: `npm run staging:test-db` (includes the two-connection concurrency test) and `npm run staging:verify`; browser checks in [STAGING_APP_TESTING.md](STAGING_APP_TESTING.md) 9.3–9.17 and 13.1–13.6 — regenerate the Excel files first with `npm run staging:test-files`.
 
 ## Production deployment checklist (for later — needs explicit approval at each step)
 
@@ -442,7 +442,7 @@ Do **not** start this until the staging results have been reviewed and approved.
 
 - **Existing anonymous sessions** still *authenticate* after 022 — they just get no data and can't change anything. If you want them fully cut off, the supported route is banning those users through the Supabase Admin API (tested on staging first). Rows in `auth.sessions` are not deleted by hand.
 - **Real viewer accounts can read everything** — by design. With sign-ups off, only accounts you create can exist.
-- **Not fixed yet:** C2 (onboarding link), C3 (021 file), the admin "Remove access" button failing for users who have history, editors being able to write fake import-log rows, and MFA for the admin account. (C4 imports, C5 the backup 1,000-row limit, and M1 duplicate serials are fixed by migration 027 and the matching app changes — see "Migration 027 on staging" below; not yet on staging.)
+- **Not fixed yet:** C2 (onboarding link), C3 (021 file), the admin "Remove access" button failing for users who have history, editors being able to write fake import-log rows, and MFA for the admin account. (C4 imports, C5 the backup 1,000-row limit, and M1 duplicate serials are fixed by migration 027 and the matching app changes — see "Migration 027 on staging" below.)
 - **Staging is not production:** Step 5b is what tells you how closely they match.
 
 ---
