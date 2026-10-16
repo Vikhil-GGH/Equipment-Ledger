@@ -9,6 +9,7 @@ How to use this document:
 - Tick ☐ → ☑ as you go, and note anything that differs.
 - Items marked **⚠ KNOWN BUG** are problems found in the audit that are **not fixed yet**. They're included so you can see them for yourself — the "Expect" describes the *current, wrong* behaviour. Reset staging afterwards ([section R](#r--resetting-staging-between-test-rounds)).
 - If something fails that is *not* marked as a known bug, note the section number, what you did, and what you saw.
+- **Testing changes staging.** Use the synthetic records named here; never test on records you want to keep as they are, and run `npm run staging:reset` to start clean.
 
 ---
 
@@ -198,36 +199,52 @@ The camera needs either this computer's webcam or manual entry. (Phones can't us
 
 ---
 
-## 11. Onboarding
+## 11. Onboarding — checklist and equipment assignment
+
+Staging now has the **employee equipment register** (migrations 025–026). Every onboarding and offboarding record is linked to an **employee record**, and everything issued to that employee is tracked until it comes back. The checklist and the equipment section are tracked **separately**.
 
 | # | Do | Expect | ☐ |
 |---|---|---|---|
-| 11.1 | **Onboarding** | Test Employee 30, 31, 32 (31 and 32 have *Identity created* ticked). | ☐ |
-| 11.2 | **Start onboarding** → `Test Employee 60` → **Start** | Opens the checklist with four unticked steps; *Equipment assigned* says "(set automatically below)". | ☐ |
-| 11.3 | Tick **Identity created**, reload the page | Still ticked. | ☐ |
-| 11.4 | Assign equipment → Serial `SYN-INV-023` → **Assign device** | *Equipment assigned* ticks itself; "Assigned device" shows SYN-INV-023. In Laptop Inventory it's under **Active / Assigned**, Assigned to Test Employee 60, scope Company. | ☐ |
-| 11.5 | New onboarding `Test Employee 61` → serial `SYN-NEW-500` | Asks for device name and category ("That serial isn't in Active Laptops (NP) yet…"). Enter `Lenovo ThinkPad T14` / `Laptop` → assigned; a new laptop SYN-NEW-500 appears in Laptop Inventory as Active / Assigned, scope NP-managed. | ☐ |
-| 11.6 | New onboarding `Test Employee 62` → serial `SYN-INV-006` (Damaged) | Error "Device SYN-INV-006 is not available to assign (currently damaged)"; nothing changes. | ☐ |
-| 11.7 | Laptop Inventory → **SYN-INV-023** (from 11.4) → **Collect** | **⚠ KNOWN BUG C2:** fails with a foreign-key error — a laptop assigned through onboarding can't be collected. | ☐ |
-| 11.8 | Tick **Required access provided** and **Onboarding successful** for Test Employee 60 | Both save. | ☐ |
+| 11.1 | **Onboarding** | The table (Test Employee 30, 31, 32 after a reset). Onboarding and Offboarding are **separate** sidebar items. | ☐ |
+| 11.2 | **Start onboarding** → type `Test Employee 30` | Because that name already exists, the dialog asks **"is it the same person?"** — *Yes — Test Employee 30* or *No — a different person*. **Start** stays disabled until you choose. Cancel. | ☐ |
+| 11.3 | **Start onboarding** → `Test Employee 60` → **Start** | "A new employee record will be created". Opens the checklist (four steps) and, below it, **Equipment assignment**. | ☐ |
+| 11.4 | Look at **Charger required?** and **Headset required?** | Three options each — **Yes / No / N/A** — and **none selected**; "Not answered yet — choose Yes, No or N/A". | ☐ |
+| 11.5 | Type a **Requested laptop** (e.g. `14-inch, 16 GB`) → **Save**, reload | Still there. | ☐ |
+| 11.6 | **Laptop** → search `SYN-INV-02` → choose **SYN-INV-021** → **Issue laptop** | *Equipment assigned* ticks itself; the summary says "Laptop: 1 issued"; the issued-equipment list shows it as **Pending return**. In Laptop Inventory it's under **Active / Assigned** for Test Employee 60. | ☐ |
+| 11.7 | Choose another laptop (**SYN-INV-022**) → **Issue another laptop** | Two laptops issued to the same employee, each its own row. | ☐ |
+| 11.8 | **Charger required? → Yes** | Only the answer is saved — **nothing is issued**. An **Issue charger** picker appears. | ☐ |
+| 11.9 | Choose **USB-C Charger** → **Issue charger** | Issued. Bulk Stock → USB-C Charger: Available −1, Provided +1, and "Provided … = 1 tracked to named employees + … issued before tracking began". | ☐ |
+| 11.10 | **Headset required? → Yes** → source **From Other Equipment** → choose a headset (e.g. **SYN-OTH-004**) → **Issue headset** | Issued; the headset is Provided to Test Employee 60. (Try **From Bulk Stock** on another employee if a Headset bulk item exists.) | ☐ |
+| 11.11 | Change **Headset required?** to **No** | The answer changes, the headset **stays issued**, and a note says to return it from Offboarding if needed. | ☐ |
+| 11.12 | Start onboarding `Test Employee 61` → **Charger required? → N/A**, **Headset required? → No** | No Issue buttons for either; summary says "Not required". | ☐ |
+| 11.13 | Tick **Required access provided** and **Onboarding successful** for Test Employee 60 | The checklist shows 4/4 **Completed** on the Onboarding list — equipment status is separate. | ☐ |
 
 ---
 
-## 12. Offboarding
+## 12. Offboarding — checklist and equipment return
 
-Offboarding is now **two required steps**: **Removed access** and **one laptop outcome** — Laptop received, Laptop retained, Laptop decommissioned, or **Not applicable** (no company laptop). The three laptop outcomes are alternatives: choosing one replaces the other. Choosing an outcome **never** collects or changes the laptop itself.
+The checklist is **two required steps**: **Removed access** and **one laptop outcome** (received / retained / decommissioned / Not applicable). Below it, **Equipment return** lists **everything issued to the employee** and processes each item on its own, updating the real inventory at the same time. Recording the checklist outcome never changes equipment.
 
 | # | Do | Expect | ☐ |
 |---|---|---|---|
-| 12.1 | **Offboarding** | A table like Onboarding's: Test Employee 01 and 02 at **0/2 Not Started**; **Test Employee 46 (legacy conflict)** at **1/2 Pending** with **⚠ Laptop outcome needs review**. Search, status filter and sorting work as on Onboarding. | ☐ |
-| 12.2 | Open **Test Employee 46 (legacy conflict)** | A warning: "Needs review: this record had Laptop received, Laptop retained all ticked…". No outcome is pre-selected ("Not decided yet"). | ☐ |
-| 12.3 | Choose **Laptop retained** | Saved; the warning disappears; "2/2 required steps done". Back on the list: **Completed**, no review flag. | ☐ |
-| 12.4 | **Start offboarding** → `Test Employee 04` → **Start** | Removed access (tick box) + Laptop outcome (5 choices) and "Assets currently assigned to Test Employee 04" listing **SYN-INV-004**. 0/2. | ☐ |
-| 12.5 | Tick **Removed access**, choose **Laptop received** | 2/2 → Completed. **SYN-INV-004 is still assigned** (status Provided) — recording the outcome doesn't collect it. | ☐ |
-| 12.6 | Switch the outcome to **Laptop decommissioned**, then **Not decided yet** | Only one is ever selected; back to 1/2 Pending. | ☐ |
-| 12.7 | **Start offboarding** → `Test Employee 98` (has no laptop) | The page says no laptop is assigned and suggests **Not applicable**. Choose it + tick Removed access → **Completed**. | ☐ |
-| 12.8 | From 12.4's page, click **SYN-INV-004** → **Collect** | It returns to Available in Laptop Inventory and disappears from Test Employee 04's list. | ☐ |
-| 12.9 | **⚠ KNOWN BUG H5** | Test Employee 04 also has monitor **SYN-MON-004**, but it isn't listed — offboarding only looks at laptops. | ☐ |
+| 12.1 | **Start offboarding** → `Test Employee 60` → confirm **Yes — Test Employee 60** → **Start** | Checklist at 0/2, and **Equipment return** listing both laptops, the charger and the headset from section 11 — type, item, serial, quantity, issued date, **Pending return**. "4 pending return · 0 of 4 processed". | ☐ |
+| 12.2 | Laptop **SYN-INV-021** → **Process return** | Five outcomes, **none pre-selected**; **Confirm** disabled. | ☐ |
+| 12.3 | Choose **Returned** | The panel says exactly what will happen: "Collect: the device becomes Available and unassigned." → **Confirm**. | ☐ |
+| 12.4 | Check | SYN-INV-021 → **Returned**; **SYN-INV-022 still Pending return** and still assigned in Laptop Inventory. "3 pending return · 1 of 4 processed". | ☐ |
+| 12.5 | Charger → **Process return** → **Retained — authorized** | "Reason (required)"; Confirm disabled until you type one (e.g. `Approved by HR`). Effect: "written off from Provided (not Available, not pending)". Confirm → status **Retained — authorized** with your reason. Bulk Stock: Provided −1, Decommissioned +1 — never Available. | ☐ |
+| 12.6 | Headset → **Returned damaged** → Confirm | The headset becomes **Damaged** and unassigned in Other Equipment. | ☐ |
+| 12.7 | SYN-INV-022 → **Lost / not recoverable** → reason `left in a taxi` → Confirm | SYN-INV-022 becomes **Lost** (Laptop Inventory → Other), unassigned, with no further actions on its page; its history shows *mark_lost* with the reason. | ☐ |
+| 12.8 | The progress line | "All items processed · 4 of 4 processed · 1 retained (authorized) · 1 lost" — the **checklist** above is still 0/2 (they're separate). | ☐ |
+| 12.9 | Tick **Removed access**, choose **Laptop received** | Checklist 2/2 → Completed on the Offboarding list. | ☐ |
+| 12.10 | **Test Employee 46 (legacy conflict)** (after a reset) | Offboarding list shows **⚠ Laptop outcome needs review**; the page names the two ticked outcomes and pre-selects none. | ☐ |
+| 12.11 | Offboarding for **Test Employee 04** | Equipment return lists laptop **SYN-INV-004** *and* monitor **SYN-MON-004** (the old "laptops only" gap, H5, is closed). | ☐ |
+
+Elsewhere:
+
+| # | Do | Expect | ☐ |
+|---|---|---|---|
+| 12.12 | Laptop Inventory, after a laptop was marked **Retained — authorized** | That laptop shows "Retained by former employee (authorized)" under its status. | ☐ |
+| 12.13 | **Access & Roles** | A "Possible duplicate employees" list (read-only; "None found" on fresh synthetic data). | ☐ |
 
 ---
 

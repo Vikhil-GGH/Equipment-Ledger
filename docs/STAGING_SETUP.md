@@ -402,6 +402,20 @@ Send me (none of these contain secrets or real personal data):
 
 ---
 
+## Automated staging checks — what may change data
+
+| Kind | Commands | Rule |
+|---|---|---|
+| **Read-only validation** (real Auth + REST API) | `npm run staging:verify`, `npm run staging:smoke -- post` | Never write. They check invariants that must hold for *whatever* records exist, never assume seed values, and probe write paths only with arguments that cannot succeed. |
+| **Mutation tests** (direct database) | `npm run staging:test-db` | Create their **own** uniquely named records (`ZZ-…`) inside a transaction that is **always rolled back** — nothing they do is kept, even if a test fails. Existing (possibly hand-edited) records are never used as fixtures. |
+| **Snapshots** (read-only) | `npm run staging:snapshot -- save <label>` / `compare <label>` | Full data backup + per-table fingerprints; `compare` proves whether anything changed. Run `save` before and `compare` after any change you want to verify. |
+
+`npm run staging:smoke -- pre` is the one exception: it is only for a database **before** migrations 022/023 and it creates an anonymous user. If a check ever can't clean up after itself safely, it must stop and report rather than "restore" an assumed state.
+
+## Migrations 025 and 026 on staging (employee equipment register)
+
+Applied to staging on 2026-10-15 after a verified snapshot (`staging-pre-025`); the snapshot comparison showed every pre-existing row and column unchanged. To repeat on a fresh staging project: `npm run staging:migrate` (it applies 025 then 026 after 024), then `npm run staging:test-db` and `npm run staging:verify`. Browser checks: [STAGING_APP_TESTING.md](STAGING_APP_TESTING.md) sections 11–12.
+
 ## Production deployment checklist (for later — needs explicit approval at each step)
 
 Do **not** start this until the staging results have been reviewed and approved.

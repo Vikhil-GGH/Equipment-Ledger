@@ -2,13 +2,21 @@
 // REST API (PostgREST) and RLS — the same path the app uses, via
 // supabase-js and the public anon key. No service-role key is used.
 //
-//   npm run staging:smoke -- pre    BEFORE applying 022/023: shows the
-//                                   anonymous hole is real on staging and
-//                                   keeps that anonymous session for later.
-//   npm run staging:smoke -- post   AFTER applying 022/023: the kept
-//                                   ("legacy") anonymous session and a new
-//                                   one have no access; admin and editor
-//                                   workflows all still work.
+//   npm run staging:smoke -- post   READ-ONLY. The kept ("legacy") anonymous
+//                                   session and a new one get no data and
+//                                   every write function rejects them; the
+//                                   admin can sign in and read everything.
+//   npm run staging:smoke -- pre    Only for a database BEFORE 022/023, and
+//                                   it is a mutation: it creates an
+//                                   anonymous auth user (to show the old
+//                                   hole and keep that session for "post").
+//
+// Staging policy: real-API checks never change data, even if a check
+// fails — every write-path probe below uses arguments that cannot succeed
+// (a non-existent id, a missing required value), and there is no restore
+// probe. Mutation tests (lifecycle, swap, imports, issue/return, raw
+// writes, restore) run in supabase/tests/db/*.db.test.ts on the same
+// staging database, inside transactions that are always rolled back.
 //
 // Results print as a table and are saved to .staging-state/ (gitignored).
 // Exit code 1 if any check FAILs. Refuses to run against production.
@@ -26,7 +34,7 @@ const LEGACY_ANON_FILE = join(stateDir, 'legacy-anon-session.json')
 const ZERO = '00000000-0000-0000-0000-000000000000'
 const PROBE = 'anon-probe'
 
-// Table -> a text column a write probe can target.
+// Tables checked (the values were write-probe columns in earlier, mutating versions).
 const TABLES = {
   serialized_assets: 'location',
   active_laptops_np: 'location',
@@ -45,6 +53,8 @@ const TABLES = {
 }
 const STATS_VIEWS = ['serialized_assets_stats', 'active_laptops_np_stats', 'monitors_stats', 'other_equipment_stats']
 const BACKUP_TABLES = Object.keys(TABLES).filter((t) => t !== 'profiles')
+// Added by 20260901000026 (employee equipment register).
+const REGISTER_TABLES = ['employees', 'equipment_issues']
 
 const results = []
 function record(status, area, check, detail = '') {
@@ -64,7 +74,7 @@ async function signInAs(email, password) {
 
 // ------------------------------------------------ anonymous denial checks
 async function expectNoAccess(c, label) {
-  for (const t of [...Object.keys(TABLES), ...STATS_VIEWS]) {
+  for (const t of [...Object.keys(TABLES), ...STATS_VIEWS, ...REGISTER_TABLES]) {
     const { count, error } = await c.from(t).select('*', { count: 'exact', head: true })
     record(error || count === 0 ? 'PASS' : 'FAIL', label, `read ${t} → 0 rows`, error ? error.message : `${count} rows`)
   }
@@ -72,47 +82,25 @@ async function expectNoAccess(c, label) {
   const allZero = !bulk.error && bulk.data.every((row) => Object.values(row).every((v) => Number(v) === 0))
   record(bulk.error || allZero ? 'PASS' : 'FAIL', label, 'read bulk_stock_stats → all zero', bulk.error?.message ?? JSON.stringify(bulk.data))
 
+  // Every argument set below would fail even for an admin (no such id, or a
+  // required value missing), so a broken permission check still can't write.
   const rpcs = [
-    ['create_asset', { p_collection: 'serialized_assets', p_name: PROBE, p_category: PROBE, p_serial: `ANON-PROBE-${Date.now()}` }],
+    ['create_asset', { p_collection: 'serialized_assets', p_name: null, p_category: null, p_serial: null }],
     ['perform_lifecycle_action', { p_collection: 'serialized_assets', p_asset_id: ZERO, p_action: 'mark_damaged' }],
     ['perform_swap', { p_collection: 'active_laptops_np', p_old_asset_id: ZERO, p_new_asset_id: ZERO, p_reason: PROBE }],
     ['onboarding_assign_device', { p_onboarding_id: ZERO, p_serial: PROBE }],
-    ['create_bulk_item', { p_name: PROBE, p_category: PROBE }],
+    ['create_bulk_item', { p_name: null, p_category: null }],
     ['perform_bulk_action', { p_item_id: ZERO, p_action: 'receive_stock', p_quantity: 1 }],
-    ['commit_asset_import', { p_collection: 'serialized_assets', p_filename: PROBE, p_rows: [{ serial: `ANON-PROBE-${Date.now()}`, name: PROBE, category: PROBE }] }],
-    ['commit_bulk_import', { p_filename: PROBE, p_rows: [{ name: PROBE, category: PROBE, quantity: 1 }] }],
-    ['restore_backup', { p_payload: {} }],
+    ['commit_asset_import', { p_collection: 'serialized_assets', p_filename: PROBE, p_rows: [{ serial: null, name: null, category: null }] }],
+    ['commit_bulk_import', { p_filename: PROBE, p_rows: [{ name: null, category: null, quantity: 1 }] }],
+    ['create_employee', { p_full_name: '' }],
+    ['issue_equipment', { p_employee_id: ZERO, p_collection: 'serialized_assets', p_asset_id: ZERO }],
+    ['return_equipment', { p_issue_id: ZERO, p_outcome: 'returned' }],
   ]
   for (const [fn, args] of rpcs) {
     const { error } = await c.rpc(fn, args)
     const rejected = !!error && /not authorized|only an admin|viewers cannot/i.test(error.message)
-    record(rejected ? 'PASS' : 'FAIL', label, `call ${fn} → rejected`, error?.message ?? 'call SUCCEEDED')
-  }
-
-  for (const [t, col] of Object.entries(TABLES)) {
-    if (t === 'profiles') continue
-    const row = t.endsWith('_history')
-      ? { asset_id: ZERO, item_id: ZERO, action: PROBE, detail: PROBE, quantity: 1 }
-      : t === 'import_events'
-        ? { target_collection: PROBE, filename: PROBE }
-        : t.endsWith('checklists')
-          ? { employee_name: PROBE }
-          : { name: PROBE, category: PROBE, serial: `ANON-PROBE-${t}`, [col]: PROBE }
-    // History tables have either asset_id or item_id, not both.
-    if (t === 'bulk_item_history') delete row.asset_id
-    else if (t.endsWith('_history')) {
-      delete row.item_id
-      delete row.quantity
-    }
-    if (t === 'bulk_items') delete row.serial
-    const ins = await c.from(t).insert(row)
-    record(ins.error ? 'PASS' : 'FAIL', label, `insert into ${t} → denied`, ins.error?.message ?? 'insert SUCCEEDED')
-  }
-  for (const [t, col] of Object.entries(TABLES)) {
-    const upd = await c.from(t).update({ [col]: PROBE }).neq('id', ZERO).select('id')
-    record(upd.error || upd.data.length === 0 ? 'PASS' : 'FAIL', label, `update ${t} → 0 rows`, upd.error?.message ?? `${upd.data.length} rows`)
-    const del = await c.from(t).delete().neq('id', ZERO).select('id')
-    record(del.error || del.data.length === 0 ? 'PASS' : 'FAIL', label, `delete ${t} → 0 rows`, del.error?.message ?? `${del.data.length} rows`)
+    record(rejected ? 'PASS' : 'FAIL', label, `call ${fn} → rejected for lack of permission`, error?.message ?? 'call SUCCEEDED')
   }
 }
 
@@ -143,12 +131,10 @@ async function prePhase() {
 // ------------------------------------------------------------ post phase
 async function postPhase() {
   // A. The anonymous session created BEFORE 022, refreshed through real Auth.
-  let legacyId = null
   if (!existsSync(LEGACY_ANON_FILE)) {
     record('FAIL', 'legacy anonymous', 'saved pre-022 session exists (run the "pre" phase before applying 022)', LEGACY_ANON_FILE)
   } else {
     const saved = JSON.parse(readFileSync(LEGACY_ANON_FILE, 'utf8'))
-    legacyId = saved.user_id
     const c = newClient()
     const { data, error } = await c.auth.refreshSession({ refresh_token: saved.refresh_token })
     if (error) {
@@ -161,207 +147,39 @@ async function postPhase() {
   }
 
   // B. A brand-new anonymous session, if staging still allows them.
-  let newAnonId = null
   {
     const c = newClient()
     const { data, error } = await c.auth.signInAnonymously()
     if (error) {
       record('PASS', 'new anonymous', 'anonymous sign-ins are disabled on staging', error.message)
     } else {
-      newAnonId = data.user.id
       record('INFO', 'new anonymous', 'anonymous sign-ins are still ENABLED on staging (disable before finishing)', data.user.id)
       await expectNoAccess(c, 'new anonymous')
     }
   }
 
-  // C. Admin workflows.
+  // C. Admin — read-only.
   const a = await signInAs(env.STAGING_ADMIN_EMAIL, env.STAGING_ADMIN_PASSWORD)
   if (a.error) {
     record('FAIL', 'admin', 'staging admin can sign in', a.error.message)
     return
   }
-  await adminWorkflows(a.c, a.user, legacyId, newAnonId)
+  await adminReadOnly(a.c, a.user)
+}
 
-  // D. Editor (optional account).
-  if (env.STAGING_EDITOR_EMAIL && env.STAGING_EDITOR_PASSWORD) {
-    const e = await signInAs(env.STAGING_EDITOR_EMAIL, env.STAGING_EDITOR_PASSWORD)
-    if (e.error) record('FAIL', 'editor', 'staging editor can sign in', e.error.message)
-    else await editorWorkflows(e.c)
-  } else {
-    record('INFO', 'editor', 'skipped (STAGING_EDITOR_EMAIL/PASSWORD not set)')
+async function adminReadOnly(c, user) {
+  const A = 'admin (read-only)'
+  const prof = await c.from('profiles').select('role').eq('id', user.id).single()
+  record(prof.data?.role === 'admin' ? 'PASS' : 'FAIL', A, 'profile role is admin', prof.error?.message ?? prof.data?.role)
+  for (const t of [...BACKUP_TABLES, ...REGISTER_TABLES]) {
+    // A full export, as the Data page does — plus a check nothing is cut off (audit C5).
+    const [{ data, error }, { count }] = await Promise.all([c.from(t).select('*'), c.from(t).select('*', { count: 'exact', head: true })])
+    if (error) record('FAIL', A, `read ${t}`, error.message)
+    else if (data.length === count) record('PASS', A, `read ${t} completely`, `${count} rows`)
+    else record('KNOWN', A, `read ${t} TRUNCATED (audit C5, not fixed yet)`, `${data.length} of ${count} rows`)
   }
-}
-
-async function step(area, check, fn) {
-  try {
-    const detail = await fn()
-    record('PASS', area, check, detail ?? '')
-  } catch (err) {
-    record('FAIL', area, check, err.message)
-  }
-}
-async function rpc(c, fn, args) {
-  const { data, error } = await c.rpc(fn, args)
-  if (error) throw new Error(`${fn}: ${error.message}`)
-  return data
-}
-function must(cond, message) {
-  if (!cond) throw new Error(message)
-}
-
-async function adminWorkflows(c, user, legacyId, newAnonId) {
-  const A = 'admin'
-  const tag = `STG-${Date.now().toString(36).toUpperCase()}`
-  const ids = {}
-  const create = (collection, name, category, serial) =>
-    rpc(c, 'create_asset', { p_collection: collection, p_name: name, p_category: category, p_serial: serial })
-  const act = (collection, id, action, assignee) =>
-    rpc(c, 'perform_lifecycle_action', { p_collection: collection, p_asset_id: id, p_action: action, p_assigned_to: assignee ?? null })
-
-  await step(A, 'profile role is admin', async () => {
-    const { data, error } = await c.from('profiles').select('role').eq('id', user.id).single()
-    must(!error && data.role === 'admin', error?.message ?? `role is ${data.role}`)
-  })
-  await step(A, 'create assets in all four collections', async () => {
-    ids.inv = await create('serialized_assets', 'Dell Latitude 5440', 'Laptop', `${tag}-INV-1`)
-    ids.spare = await create('serialized_assets', 'Dell Latitude 5440', 'Laptop', `${tag}-INV-2`)
-    ids.onb = await create('serialized_assets', 'HP EliteBook 840', 'Laptop', `${tag}-INV-3`)
-    ids.np = await create('active_laptops_np', 'Lenovo ThinkPad T14', 'Laptop', `${tag}-NP-1`)
-    ids.mon = await create('monitors', 'Dell 24 Monitor', 'Monitor', `${tag}-MON-1`)
-    ids.oth = await create('other_equipment', 'USB-C Dock', 'Dock', `${tag}-OTH-1`)
-    return tag
-  })
-  await step(A, 'Provide moves an Inventory laptop to Active Laptops (NP)', async () => {
-    must((await act('serialized_assets', ids.inv, 'provide', 'Test Employee 90')) === 'active_laptops_np', 'did not move')
-    const { data } = await c.from('active_laptops_np').select('status, moved_from_inventory').eq('id', ids.inv).single()
-    must(data?.status === 'provided' && data.moved_from_inventory === true, JSON.stringify(data))
-  })
-  await step(A, 'Transfer, then Collect moves it back to Inventory with full history', async () => {
-    must((await act('active_laptops_np', ids.inv, 'transfer', 'Test Employee 91')) === 'active_laptops_np', 'transfer moved it')
-    must((await act('active_laptops_np', ids.inv, 'collect')) === 'serialized_assets', 'collect did not move it back')
-    const { data } = await c.from('serialized_assets').select('status, assigned_to').eq('id', ids.inv).single()
-    must(data?.status === 'available' && data.assigned_to === null, JSON.stringify(data))
-    const hist = await c.from('serialized_asset_history').select('action').eq('asset_id', ids.inv)
-    const actions = hist.data.map((h) => h.action).sort().join(',')
-    must(actions === 'collect,created,provide,transfer', actions)
-    return actions
-  })
-  await step(A, 'Mark damaged → Mark repaired', async () => {
-    await act('serialized_assets', ids.inv, 'mark_damaged')
-    await act('serialized_assets', ids.inv, 'mark_repaired')
-  })
-  await step(A, 'Monitors and Other Equipment stay in their own collections', async () => {
-    must((await act('monitors', ids.mon, 'provide', 'Test Employee 90')) === 'monitors', 'monitor moved')
-    must((await act('monitors', ids.mon, 'collect')) === 'monitors', 'monitor moved')
-    must((await act('other_equipment', ids.oth, 'retain')) === 'other_equipment', 'other moved')
-  })
-  await step(A, 'Swap (replacement picked up from Inventory)', async () => {
-    await act('active_laptops_np', ids.np, 'provide', 'Test Employee 92')
-    await rpc(c, 'perform_swap', { p_collection: 'active_laptops_np', p_old_asset_id: ids.np, p_new_asset_id: ids.spare, p_reason: 'staging test: cracked screen' })
-    const { data } = await c.from('active_laptops_np').select('id, status, assigned_to').in('id', [ids.np, ids.spare])
-    const old = data.find((r) => r.id === ids.np)
-    const neu = data.find((r) => r.id === ids.spare)
-    must(old?.status === 'damaged' && old.assigned_to === null, `old: ${JSON.stringify(old)}`)
-    must(neu?.status === 'provided' && neu.assigned_to === 'Test Employee 92', `new: ${JSON.stringify(neu)}`)
-  })
-  await step(A, 'Asset import and bulk import (and the import log)', async () => {
-    const assets = await rpc(c, 'commit_asset_import', {
-      p_collection: 'monitors',
-      p_filename: `${tag}-monitors.xlsx`,
-      p_rows: [1, 2].map((i) => ({ serial: `${tag}-IMP-${i}`, name: 'LG 27 Monitor', category: 'Monitor', status: '', assigned_to: '', location: '' })),
-    })
-    must(assets.created === 2, JSON.stringify(assets))
-    const bulk = await rpc(c, 'commit_bulk_import', { p_filename: `${tag}-bulk.xlsx`, p_rows: [{ name: `${tag} Mouse`, category: 'Accessory', location: '', quantity: 5 }] })
-    must(bulk.created === 1, JSON.stringify(bulk))
-    const log = await c.from('import_events').select('id').like('filename', `${tag}-%`)
-    must(log.data?.length === 2, `log rows: ${log.data?.length}`)
-  })
-  await step(A, 'Bulk stock: create and issue', async () => {
-    ids.bulk = await rpc(c, 'create_bulk_item', { p_name: `${tag} Charger`, p_category: 'Power', p_initial_quantity: 10 })
-    await rpc(c, 'perform_bulk_action', { p_item_id: ids.bulk, p_action: 'issue', p_quantity: 3 })
-    const { data } = await c.from('bulk_items').select('available, provided').eq('id', ids.bulk).single()
-    must(data?.available === 7 && data.provided === 3, JSON.stringify(data))
-  })
-  await step(A, 'Onboarding: create, tick a step, assign a device', async () => {
-    const ins = await c.from('onboarding_checklists').insert({ employee_name: `Test Employee 93 ${tag}`, created_by: user.id }).select('id').single()
-    must(!ins.error, ins.error?.message)
-    ids.onboarding = ins.data.id
-    const upd = await c.from('onboarding_checklists').update({ identity_created: true }).eq('id', ids.onboarding).select('id')
-    must(upd.data?.length === 1, upd.error?.message ?? 'step not saved')
-    await rpc(c, 'onboarding_assign_device', { p_onboarding_id: ids.onboarding, p_serial: `${tag}-INV-3` })
-    const { data } = await c.from('onboarding_checklists').select('equipment_assigned, assigned_asset_id').eq('id', ids.onboarding).single()
-    must(data?.equipment_assigned === true && data.assigned_asset_id === ids.onb, JSON.stringify(data))
-  })
-  {
-    // Investigation of audit finding C2 — not fixed yet, recorded as KNOWN.
-    const { error } = await c.rpc('perform_lifecycle_action', { p_collection: 'active_laptops_np', p_asset_id: ids.onb, p_action: 'collect' })
-    if (error && /foreign key/i.test(error.message)) record('KNOWN', A, 'C2: collecting an onboarding-assigned Inventory laptop fails (not fixed yet)', error.message)
-    else record('INFO', A, 'C2: collecting an onboarding-assigned Inventory laptop', error?.message ?? 'succeeded — C2 NOT reproduced on staging')
-  }
-  await step(A, 'Offboarding: create, tick a step, find the employee’s assets', async () => {
-    const ins = await c.from('offboarding_checklists').insert({ employee_name: 'Test Employee 92', created_by: user.id }).select('id').single()
-    must(!ins.error, ins.error?.message)
-    const upd = await c.from('offboarding_checklists').update({ removed_access: true }).eq('id', ins.data.id).select('id')
-    must(upd.data?.length === 1, upd.error?.message ?? 'step not saved')
-    const { data } = await c.from('active_laptops_np').select('id').ilike('assigned_to', 'Test Employee 92')
-    must(data?.some((r) => r.id === ids.spare), 'swapped-in laptop not found for the employee')
-  })
-  {
-    // Backup export exactly as the Data page does it, plus truncation check (audit C5).
-    const exported = { exported_at: new Date().toISOString(), tables: {} }
-    for (const t of BACKUP_TABLES) {
-      const [{ data, error }, { count }] = await Promise.all([
-        c.from(t).select('*'),
-        c.from(t).select('*', { count: 'exact', head: true }),
-      ])
-      if (error) {
-        record('FAIL', A, `backup export: ${t}`, error.message)
-        continue
-      }
-      exported.tables[t] = data
-      if (data.length === count) record('PASS', A, `backup export: ${t} complete`, `${count} rows`)
-      else record('KNOWN', A, `backup export: ${t} TRUNCATED (audit C5, not fixed yet)`, `${data.length} of ${count} rows`)
-    }
-    const file = join(stateDir, `staging-export-${Date.now()}.json`)
-    writeFileSync(file, JSON.stringify(exported))
-    record('INFO', A, 'backup export saved (synthetic staging data)', file)
-  }
-  await step(A, 'Direct table writes are blocked even for admin (023)', async () => {
-    const upd = await c.from('serialized_assets').update({ location: PROBE }).eq('id', ids.inv).select('id')
-    must(!upd.error && upd.data.length === 0, upd.error?.message ?? `${upd.data.length} rows updated`)
-    const del = await c.from('serialized_assets').delete().eq('id', ids.inv).select('id')
-    must(!del.error && del.data.length === 0, del.error?.message ?? `${del.data.length} rows deleted`)
-    const ins = await c.from('monitors').insert({ name: PROBE, category: PROBE, serial: `${tag}-RAW` })
-    must(!!ins.error, 'raw insert succeeded')
-  })
-  await step(A, 'User list readable; role of an anonymous user cannot be raised', async () => {
-    const { data, error } = await c.from('profiles').select('id, role')
-    must(!error && data.length > 0, error?.message ?? 'no profiles')
-    if (legacyId) {
-      const up = await c.from('profiles').update({ role: 'editor' }).eq('id', legacyId).select('id')
-      must(!!up.error && /anonymous users cannot be granted/i.test(up.error.message), up.error?.message ?? 'promotion SUCCEEDED')
-    }
-    if (newAnonId) must(!data.some((r) => r.id === newAnonId), 'new anonymous user has a profile row')
-  })
-  await step(A, 'No anonymous probe write landed anywhere', async () => {
-    for (const [t, col] of Object.entries(TABLES)) {
-      const { count } = await c.from(t).select('*', { count: 'exact', head: true }).eq(col, PROBE)
-      must(count === 0, `${count} probe row(s) in ${t}`)
-    }
-  })
-}
-
-async function editorWorkflows(c) {
-  const E = 'editor'
-  const tag = `STG-E-${Date.now().toString(36).toUpperCase()}`
-  await step(E, 'create an asset and run a lifecycle action', async () => {
-    const id = await rpc(c, 'create_asset', { p_collection: 'monitors', p_name: 'Dell 24 Monitor', p_category: 'Monitor', p_serial: `${tag}-MON` })
-    await rpc(c, 'perform_lifecycle_action', { p_collection: 'monitors', p_asset_id: id, p_action: 'retain' })
-  })
-  await step(E, 'direct table updates are blocked (023)', async () => {
-    const upd = await c.from('monitors').update({ location: PROBE }).neq('id', ZERO).select('id')
-    must(!upd.error && upd.data.length === 0, upd.error?.message ?? `${upd.data.length} rows updated`)
-  })
+  const mm = await c.from('equipment_register_mismatches').select('*')
+  record(!mm.error && mm.data.length === 0 ? 'PASS' : 'FAIL', A, 'equipment register matches every device', mm.error?.message ?? `${mm.data.length} mismatches`)
 }
 
 // ------------------------------------------------------------------- run
