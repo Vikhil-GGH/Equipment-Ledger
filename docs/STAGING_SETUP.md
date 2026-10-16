@@ -442,7 +442,7 @@ Do **not** start this until the staging results have been reviewed and approved.
 
 - **Existing anonymous sessions** still *authenticate* after 022 — they just get no data and can't change anything. If you want them fully cut off, the supported route is banning those users through the Supabase Admin API (tested on staging first). Rows in `auth.sessions` are not deleted by hand.
 - **Real viewer accounts can read everything** — by design. With sign-ups off, only accounts you create can exist.
-- **Not fixed yet:** C2 (onboarding link), C3 (021 file), the admin "Remove access" button failing for users who have history, editors being able to write fake import-log rows, and MFA for the admin account. (C4 imports, C5 the backup 1,000-row limit, and M1 duplicate serials are fixed by migration 027 and the matching app changes — see "Migration 027 on staging" below.)
+- **Not fixed yet:** C2 (onboarding link), C3 (021 file), the admin "Remove access" button failing for users who have history, editors being able to write fake import-log rows, and MFA for the admin account. (C4 imports, C5 the backup 1,000-row limit, and M1 duplicate serials are fixed by migration 027 and the matching app changes — see "Migration 027 on staging" above.)
 - **Staging is not production:** Step 5b is what tells you how closely they match.
 
 ---
