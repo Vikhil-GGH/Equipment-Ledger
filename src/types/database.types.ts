@@ -700,6 +700,20 @@ export interface Database {
       }
     }
     Views: {
+      // 20260901000027: existing devices that share a normalized serial (or
+      // have none), kept as they are, for review only.
+      serial_duplicate_candidates: {
+        Row: {
+          serial_key: string
+          collection: AssetCollection
+          asset_id: string
+          serial: string
+          status: AssetStatus
+          assigned_to: string | null
+          reason: string
+        }
+        Relationships: []
+      }
       employee_possible_duplicates: {
         Row: {
           employee_id: string
@@ -840,7 +854,7 @@ export interface Database {
           [key: string]: unknown
           p_payload: Json
         }
-        Returns: undefined
+        Returns: Json
       }
       create_employee: {
         Args: {

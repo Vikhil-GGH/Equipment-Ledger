@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { getErrorMessage } from '../../lib/errors'
-import { useExportBackup, useRestoreBackup, type BackupFile } from './api'
+import { useExportBackup, useRestoreBackup, type BackupFile, type RestoreResult } from './api'
+import { validateBackupFile } from './backupFile'
 
 const CONFIRM_PHRASE = 'RESTORE'
 
@@ -9,13 +10,21 @@ export function DataBackupPage() {
   const restoreBackup = useRestoreBackup()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const [pendingFile, setPendingFile] = useState<{ name: string; backup: BackupFile } | null>(null)
+  const [pendingFile, setPendingFile] = useState<{
+    name: string
+    backup: BackupFile
+    counts: Record<string, number>
+    verified: boolean
+  } | null>(null)
   const [confirmText, setConfirmText] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [restoredAt, setRestoredAt] = useState<string | null>(null)
+  const [restoreResult, setRestoreResult] = useState<RestoreResult | null>(null)
+  const [exported, setExported] = useState<{ rows: number; tables: number } | null>(null)
 
   async function handleExport() {
     setError(null)
+    setExported(null)
     try {
       const backup = await exportBackup.mutateAsync()
       const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' })
@@ -26,6 +35,8 @@ export function DataBackupPage() {
       a.download = `equipment-ledger-backup-${date}.json`
       a.click()
       URL.revokeObjectURL(url)
+      const counts = Object.values(backup.counts ?? {})
+      setExported({ rows: counts.reduce((a, b) => a + b, 0), tables: counts.length })
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to export backup'))
     }
@@ -34,13 +45,17 @@ export function DataBackupPage() {
   async function handleFileSelected(file: File) {
     setError(null)
     setRestoredAt(null)
+    setRestoreResult(null)
+    setPendingFile(null)
     try {
       const text = await file.text()
-      const parsed = JSON.parse(text) as BackupFile
-      if (!parsed || typeof parsed !== 'object' || !parsed.tables) {
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(text)
+      } catch {
         throw new Error('This file does not look like an Equipment Ledger backup.')
       }
-      setPendingFile({ name: file.name, backup: parsed })
+      setPendingFile({ name: file.name, ...validateBackupFile(parsed) })
       setConfirmText('')
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to read that file'))
@@ -51,7 +66,7 @@ export function DataBackupPage() {
     if (!pendingFile) return
     setError(null)
     try {
-      await restoreBackup.mutateAsync(pendingFile.backup)
+      setRestoreResult(await restoreBackup.mutateAsync(pendingFile.backup))
       setRestoredAt(new Date().toLocaleString())
       setPendingFile(null)
       setConfirmText('')
@@ -77,7 +92,19 @@ export function DataBackupPage() {
       )}
       {restoredAt && (
         <p role="status" className="text-sm text-teal-700 dark:text-teal-400">
-          Backup restored at {restoredAt}.
+          Backup restored at {restoredAt}
+          {restoreResult &&
+            ` — ${Object.values(restoreResult.counts).reduce((a, b) => a + b, 0)} rows across ${
+              Object.keys(restoreResult.counts).length
+            } tables, every count verified`}
+          .
+          {restoreResult && restoreResult.duplicate_serials > 0 &&
+            ` ${restoreResult.duplicate_serials} devices share a serial number with another device (kept as they are, for review).`}
+        </p>
+      )}
+      {exported && (
+        <p role="status" className="text-sm text-teal-700 dark:text-teal-400">
+          Backup downloaded: {exported.rows} rows from {exported.tables} tables, every table checked complete.
         </p>
       )}
 
@@ -126,6 +153,13 @@ export function DataBackupPage() {
               {new Date(pendingFile.backup.exported_at).toLocaleString()}), wiping all current
               data. Type <span className="font-mono font-semibold">{CONFIRM_PHRASE}</span> to
               confirm.
+            </p>
+            <p className="text-xs text-neutral-600 dark:text-neutral-400">
+              {Object.values(pendingFile.counts).reduce((a, b) => a + b, 0)} rows in{' '}
+              {Object.keys(pendingFile.counts).length} tables.{' '}
+              {pendingFile.verified
+                ? 'Row counts checked against the export; the server checks them again and restores nothing if any differ.'
+                : 'Older backup without row counts — its completeness cannot be checked.'}
             </p>
             <input
               type="text"

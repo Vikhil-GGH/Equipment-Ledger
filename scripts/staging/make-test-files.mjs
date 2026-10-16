@@ -42,24 +42,24 @@ sheet('02-inventory-with-errors.xlsx', [
   ['Dell Latitude 5440', 'Laptop', 'SYN-INV-201', 'available'],
 ])
 
-// 3. KNOWN BUG C4: re-importing assigned NP laptops with no Status /
-//    Assigned-to columns resets them to Available and unassigns them.
-sheet('03-KNOWN-BUG-np-status-reset.xlsx', [
+// 3. (was bug C4, fixed by 027) re-importing assigned NP laptops with no
+//    Status / Assigned-to columns must leave their assignment alone.
+sheet('03-np-reimport-no-status.xlsx', [
   ['Name', 'Category', 'Serial', 'Location'],
   ['Lenovo ThinkPad T14', 'Laptop', 'SYN-NP-001', 'Remote'],
   ['Lenovo ThinkPad T14', 'Laptop', 'SYN-NP-002', 'Remote'],
   ['Lenovo ThinkPad T14', 'Laptop', 'SYN-NP-003', 'Remote'],
 ])
 
-// 4. KNOWN BUG H2: preview matches serials ignoring case, the save doesn't.
-sheet('04-KNOWN-BUG-case-mismatch.xlsx', [
+// 4. (was bug H2, fixed by 027) a serial in different case is the same device.
+sheet('04-case-mismatch.xlsx', [
   ['Name', 'Category', 'Serial'],
   ['Dell Latitude 5440', 'Laptop', 'syn-inv-012'],
 ])
 
-// 5. KNOWN BUG H3: a laptop currently in Active Laptops (NP) imported into
-//    Laptop Inventory creates a second record.
-sheet('05-KNOWN-BUG-cross-collection.xlsx', [
+// 5. (was bug H3, fixed by 027) a laptop currently in Active Laptops (NP)
+//    imported into Laptop Inventory is the same device, not a new one.
+sheet('05-cross-collection.xlsx', [
   ['Name', 'Category', 'Serial'],
   ['Dell Latitude 5440', 'Laptop', 'SYN-INV-001'],
 ])
@@ -76,6 +76,18 @@ sheet('07-KNOWN-BUG-header-space.xlsx', [
   ['Name', 'Category', 'Serial '],
   ['Headset', 'Headset', 'SYN-OTH-201'],
   ['Headset', 'Headset', 'SYN-OTH-202'],
+])
+
+// 8. Status / assignee in the sheet differ from the ledger: reported, never applied.
+sheet('08-status-conflict.xlsx', [
+  ['Name', 'Category', 'Serial', 'Status', 'Assigned to'],
+  ['Lenovo ThinkPad T14', 'Laptop', 'SYN-NP-002', 'available', 'Someone Else'],
+])
+// 9. A new device can't arrive already assigned: skipped with a reason.
+sheet('09-new-assigned.xlsx', [
+  ['Name', 'Category', 'Serial', 'Status', 'Assigned to'],
+  ['Dell Latitude 5440', 'Laptop', 'SYN-INV-203', 'provided', 'Test Employee 70'],
+  ['Dell Latitude 5440', 'Laptop', 'SYN-INV-204', '', ''],
 ])
 
 // Printable QR labels for the scanner.

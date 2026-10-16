@@ -1,4 +1,5 @@
 import type { AssetStatus } from '../../types/database.types'
+import { normalizeSerial } from '../../lib/serial'
 
 /**
  * One Laptop Inventory over the two physical tables, without changing
@@ -83,9 +84,8 @@ export function laptopTab(status: AssetStatus | string): Exclude<LaptopTab, 'all
   }
 }
 
-export function normalizeSerial(serial: string): string {
-  return serial.trim().toLowerCase()
-}
+// One rule everywhere (matches the database): see src/lib/serial.ts.
+export { normalizeSerial }
 
 /**
  * Combines both tables into one list: one row per asset id (an asset is

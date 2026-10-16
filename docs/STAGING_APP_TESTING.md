@@ -161,17 +161,21 @@ Files are in `.staging-state/test-files/` (created by `npm run staging:test-file
 |---|---|---|---|
 | 9.1 | **Monitors** → import `01-monitors-new.xlsx` | Preview: **To create 4**, To update 0, Errors 0. Commit → "4 created, 0 updated". `SYN-MON-101…104` appear in Monitors. | ☐ |
 | 9.2 | **Import History** | The import is listed with target Monitors, filename, 4 created. | ☐ |
-| 9.3 | Import `01-monitors-new.xlsx` **again** | Preview: To update 4. Commit → "0 created, 4 updated" (no duplicates — matched by serial). | ☐ |
+| 9.3 | Import `01-monitors-new.xlsx` **again** | Preview: **Already in the ledger 4**. Commit → "0 created, 0 updated, 4 already up to date" — no duplicates and **no new history entries** on those monitors (open one: still just *created*). | ☐ |
 | 9.4 | **Laptop Inventory** → **Import from Excel** → **Serialized Assets** (= Company laptops) → import `02-inventory-with-errors.xlsx` (map Status too) | Preview: To create 1, **Errors (skipped) 3** — "Missing serial", "Invalid status "broken"", "Duplicate serial in this sheet". Commit → 1 created (`SYN-INV-201`). | ☐ |
 | 9.5 | Check **Import History** for 9.4 | **⚠ KNOWN BUG M3:** shows **0 errored**, although 3 rows were skipped. | ☐ |
-| 9.6 | Note SYN-NP-002 is Active / Test Employee 07 → **Import from Excel** → **Active Laptops (NP)** → import `03-KNOWN-BUG-np-status-reset.xlsx` | **⚠ KNOWN BUG C4 (the import-corruption bug):** preview says Update 3 with no warning; after commit SYN-NP-001…003 are **Available and unassigned** — their assignments were wiped because the sheet had no Status/Assigned-to columns. | ☐ |
-| 9.7 | **Laptop Inventory** → import `04-KNOWN-BUG-case-mismatch.xlsx` | **⚠ KNOWN BUG H2:** preview says **Update** (it matched SYN-INV-012 ignoring case) but commit says **1 created** — a second laptop `syn-inv-012` now exists. | ☐ |
-| 9.8 | **Laptop Inventory** → import `05-KNOWN-BUG-cross-collection.xlsx` (SYN-INV-001 is assigned to Test Employee 01, so it lives in Active Laptops) | **⚠ KNOWN BUG H3:** preview says **Create**; a second `SYN-INV-001` appears in Laptop Inventory while the real one is in Active Laptops. | ☐ |
-| 9.9 | After 9.8: Laptop Inventory → the **SYN-INV-001** in Active / Assigned → **Collect** | Fails with a duplicate-key error — the duplicate from 9.8 blocks the move back. | ☐ |
+| 9.6 | Note SYN-NP-002 is Active / Test Employee 07 → **Import from Excel** → **Active Laptops (NP)** → import `03-np-reimport-no-status.xlsx` | *(Was bug C4, fixed by migration 027.)* Preview: Already in the ledger 3, with a note that imports never change status or assignment. After commit SYN-NP-001…003 are **still Active and assigned to the same people**; only a changed Location is updated. | ☐ |
+| 9.7 | **Laptop Inventory** → import `04-case-mismatch.xlsx` | *(Was bug H2.)* Preview: **Existing**; commit: "1 already up to date". No second laptop `syn-inv-012`. | ☐ |
+| 9.8 | **Laptop Inventory** → import `05-cross-collection.xlsx` (SYN-INV-001 is assigned to Test Employee 01, so it lives in Active Laptops) | *(Was bug H3.)* Preview: **Existing**; commit: already up to date. Only **one** SYN-INV-001, still in Active / Assigned. | ☐ |
+| 9.9 | After 9.8: Laptop Inventory → the **SYN-INV-001** in Active / Assigned → **Collect** | Works (no duplicate to block the move). | ☐ |
 | 9.10 | **Bulk Stock** → import `06-bulk-received.xlsx` (map Quantity) | Preview: Update 1 (Wireless Mouse), Create 1 (Webcam, unless added in 8.8). Commit → Wireless Mouse Available +10. | ☐ |
 | 9.11 | Import `06-bulk-received.xlsx` **again** | **⚠ KNOWN BUG H4:** Wireless Mouse goes up by **another 10** — the same file counted twice. | ☐ |
 | 9.12 | **Other Equipment** → import `07-KNOWN-BUG-header-space.xlsx` | **⚠ KNOWN BUG M5:** the column shows as "Serial" in the mapping, but the preview shows **Missing serial** on every row (the sheet's header is "Serial " with a trailing space). | ☐ |
 | 9.13 | Upload any `.json` or `.txt` file | An error "Could not read that file" or "No data found"; nothing imported. | ☐ |
+| 9.14 | **Active Laptops (NP)** import `08-status-conflict.xlsx` (map Status and Assigned to) | Commit → "**Not applied — 2 status or assignment differences**": SYN-NP-002 status is "provided", sheet says "available"; assigned to is "Test Employee 07", sheet says "Someone Else". The serial links to the laptop, which is **unchanged**. | ☐ |
+| 9.15 | **Laptop Inventory → Serialized Assets** import `09-new-assigned.xlsx` (map Status and Assigned to) | "1 created" (SYN-INV-204) and "**Skipped — 1 row**": SYN-INV-203 can't be imported as assigned/Provided — it was not created. | ☐ |
+| 9.16 | **Monitors → Add asset** with serial `syn-inv-021` (a laptop's serial, lower case) | Refused: "Serial number "syn-inv-021" already exists … each device needs its own serial". Same for ` SYN-INV-021 ` with spaces. | ☐ |
+| 9.17 | **Access & Roles** → *Devices sharing a serial number* | The synthetic duplicates SYN-DUP-A (Laptop Inventory + Monitors), SYN-DUP-B / syn-dup-b, SYN-DUP-C / " SYN-DUP-C" — read-only, each linking to its device; they still open and work normally. | ☐ |
 
 ---
 
@@ -254,13 +258,15 @@ Do these **after** a few changes above, so there is something to compare.
 
 | # | Do | Expect | ☐ |
 |---|---|---|---|
-| 13.1 | **Export backup** → **Export backup** | Downloads `equipment-ledger-backup-<date>.json`. | ☐ |
+| 13.1 | **Export backup** → **Export backup** | Downloads `equipment-ledger-backup-<date>.json` and says "Backup downloaded: *N* rows from 15 tables, every table checked complete". | ☐ |
 | 13.2 | Make one visible change: Monitors → **SYN-MON-011** → **Retain** | Status Retained. | ☐ |
-| 13.3 | **Import backup** → choose the file from 13.1 | A red warning, "About to restore … wiping all current data", and a box asking you to type **RESTORE**. The red button stays disabled until you do. | ☐ |
-| 13.4 | Type `RESTORE` → **Restore and overwrite everything** | "Backup restored at …". **SYN-MON-011** is **Available** again; everything else matches the moment of export — including offboarding outcomes such as **Not applicable**. | ☐ |
+| 13.3 | **Import backup** → choose the file from 13.1 | A red warning, "About to restore … wiping all current data", the number of rows and tables, "Row counts checked against the export…", and a box asking you to type **RESTORE**. The red button stays disabled until you do. | ☐ |
+| 13.4 | Type `RESTORE` → **Restore and overwrite everything** | "Backup restored at … — *N* rows across 15 tables, every count verified" (plus a note about the devices sharing a serial). **SYN-MON-011** is **Available** again; everything else matches the moment of export — including offboarding outcomes such as **Not applicable** and Charger/Headset Required answers. | ☐ |
 | 13.5 | Choose a `.xlsx` or random `.json` file to restore | An error "does not look like an Equipment Ledger backup" (for a non-backup JSON), or a read error; nothing restored. | ☐ |
 
-**⚠ KNOWN BUG C5 (optional, shows data loss):** run `npm run staging:reset -- --large` (adds 1,120 history rows), then **Export backup** → open the file in a text editor → `serialized_asset_history` holds only **1,000** entries, not 1,148. Restoring that file would permanently delete the rest. **Don't** restore it unless you want to see that; reset afterwards.
+| 13.6 | Open the file from 13.1 in a text editor, delete one entry from `serialized_asset_history` (one `{ … },` block), save, and choose it to restore | Refused before anything is sent: "This backup is incomplete: serialized_asset_history has … rows but the export recorded …". | ☐ |
+
+**Large tables (was bug C5, fixed):** run `npm run staging:reset -- --large` (adds 1,120 history rows), then **Export backup** → the file's `counts.serialized_asset_history` and the number of entries in `serialized_asset_history` are both the full number (over 1,000), and the success message counts them. Reset afterwards.
 
 ---
 

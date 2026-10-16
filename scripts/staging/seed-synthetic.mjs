@@ -157,6 +157,11 @@ try {
   }
 
   // Deliberate duplicate patterns (for the later duplicate investigation).
+  // Since 20260901000027 new duplicates are refused, so these are created
+  // the way they arose before it — as legacy rows the registry then marks
+  // "grandfathered" (kept, listed in serial_duplicate_candidates).
+  const hasSerialRegistry = (await one(`select to_regclass('public.serial_keys') is not null as yes`)).yes
+  if (hasSerialRegistry) await db.query(`select set_config('equipment.serial_check_disabled', 'on', true)`)
   await create('serialized_assets', 'Dell Latitude 5440', 'Laptop', 'SYN-DUP-A')
   await create('monitors', 'Dell 24 Monitor', 'Monitor', 'SYN-DUP-A') // same serial, two collections
   await create('other_equipment', 'USB-C Dock', 'Dock', 'SYN-DUP-B')
@@ -164,12 +169,14 @@ try {
   await create('active_laptops_np', 'Lenovo ThinkPad T14', 'Laptop', 'SYN-DUP-C')
   await create('active_laptops_np', 'Lenovo ThinkPad T14', 'Laptop', ' SYN-DUP-C') // leading space
   bump('duplicate patterns (3)')
+  if (hasSerialRegistry) await db.query(`select set_config('equipment.serial_check_disabled', '', true)`)
 
   // With the employee register (20260901000026): devices assigned above are
   // already in it (its trigger); link the checklists to employee records the
   // same way the migration's backfill does.
   await db.query('reset role')
   await db.query(`select set_config('request.jwt.claims', '', true)`)
+  if (hasSerialRegistry) await db.query('select rebuild_serial_keys()')
   const hasRegister = (await one(`select to_regprocedure('public.rebuild_equipment_register_from_assignments()') is not null as yes`)).yes
   if (hasRegister) {
     await db.query('select rebuild_equipment_register_from_assignments()')

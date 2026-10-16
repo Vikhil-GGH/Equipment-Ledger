@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
-import type { UserRole } from '../../types/database.types'
+import type { AssetCollection, AssetStatus, UserRole } from '../../types/database.types'
 
 export interface ProfileRow {
   id: string
@@ -53,6 +53,36 @@ export function useRemoveUser() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
+    },
+  })
+}
+
+export interface SerialDuplicate {
+  serial_key: string
+  collection: AssetCollection
+  asset_id: string
+  serial: string
+  status: AssetStatus
+  assigned_to: string | null
+  reason: string
+}
+
+/**
+ * Devices that already shared a serial (or had none) when serial checks
+ * were added (20260901000027). null when the database predates that.
+ */
+export function useSerialDuplicates() {
+  return useQuery({
+    queryKey: ['admin', 'serial-duplicates'],
+    queryFn: async (): Promise<SerialDuplicate[] | null> => {
+      const { data, error } = await supabase
+        .from('serial_duplicate_candidates')
+        .select('*')
+        .order('serial_key')
+        .order('collection')
+      if (error && (error.code === 'PGRST205' || error.code === '42P01')) return null
+      if (error) throw error
+      return data as SerialDuplicate[]
     },
   })
 }

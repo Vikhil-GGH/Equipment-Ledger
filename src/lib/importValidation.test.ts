@@ -38,15 +38,21 @@ describe('validateAssetImportRow', () => {
   it('flags a serial already seen earlier in the same sheet, case-insensitively', () => {
     const errors = validateAssetImportRow(
       assetRow({ serial: 'sn-001' }),
-      new Set(['sn-001']),
+      new Set(['SN-001']),
     )
     expect(errors).toContain('Duplicate serial in this sheet')
+  })
+
+  it('uses the database serial rule: surrounding and repeated whitespace do not make a new serial', () => {
+    expect(validateAssetImportRow(assetRow({ serial: ' SN-001 ' }), new Set(['SN-001']))).toContain('Duplicate serial in this sheet')
+    expect(validateAssetImportRow(assetRow({ serial: 'sn  001' }), new Set(['SN 001']))).toContain('Duplicate serial in this sheet')
+    expect(validateAssetImportRow(assetRow({ serial: 'SN001' }), new Set(['SN 001']))).toEqual([])
   })
 
   it('does not flag a serial that only exists in the DB, not the sheet', () => {
     // seenSoFar tracks sheet-local duplicates only; DB-existing serials are
     // a legitimate update, checked separately at commit time.
-    const errors = validateAssetImportRow(assetRow({ serial: 'SN-002' }), new Set(['sn-001']))
+    const errors = validateAssetImportRow(assetRow({ serial: 'SN-002' }), new Set(['SN-001']))
     expect(errors).not.toContain('Duplicate serial in this sheet')
   })
 

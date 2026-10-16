@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import type { AssetCollection } from '../../types/database.types'
 import { cellToString, parseExcelFile, type ParsedSheet } from '../../lib/excel'
 import { loadMapping, saveMapping } from '../../lib/importMapping'
@@ -14,7 +14,15 @@ import {
   type RawAssetImportRow,
   type RawBulkImportRow,
 } from '../../lib/importValidation'
-import { useCommitAssetImport, useCommitBulkImport, useExistingBulkItemKeys, useExistingSerials } from './api'
+import { normalizeSerial } from '../../lib/serial'
+import {
+  useCommitAssetImport,
+  useCommitBulkImport,
+  useExistingBulkItemKeys,
+  useExistingSerials,
+  type AssetImportIssue,
+  type AssetImportResult,
+} from './api'
 
 type ImportTarget = AssetCollection | 'bulk_items'
 
@@ -50,6 +58,13 @@ const TARGET_PATH: Record<ImportTarget, string> = {
   bulk_items: '/bulk-stock',
 }
 
+const DEVICE_PATH: Record<AssetCollection, string> = {
+  serialized_assets: '/serialized-assets',
+  active_laptops_np: '/active-laptops-np',
+  monitors: '/monitors',
+  other_equipment: '/other-equipment',
+}
+
 type Row = { rowIndex: number; errors: string[]; isUpdate: boolean }
 type AssetRow = Row & { data: NormalizedAssetImportRow }
 type BulkRow = Row & { data: NormalizedBulkImportRow }
@@ -66,7 +81,11 @@ export function ImportWizard({ target }: { target: ImportTarget }) {
   const [sheetIndex, setSheetIndex] = useState(0)
   const [mapping, setMapping] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
-  const [result, setResult] = useState<{ created: number; updated: number } | null>(null)
+  const [result, setResult] = useState<
+    { created: number; updated: number } | AssetImportResult | null
+  >(null)
+  // Spreadsheet row number of each committed row (the server numbers them 1…n).
+  const [sheetRowNumbers, setSheetRowNumbers] = useState<number[]>([])
 
   const existingSerials = useExistingSerials(
     (isBulk ? 'serialized_assets' : target) as AssetCollection,
@@ -132,8 +151,8 @@ export function ImportWizard({ target }: { target: ImportTarget }) {
         location: mapping.location ? cellToString(raw[mapping.location]) : '',
       }
       const errors = validateAssetImportRow(mapped, seen)
-      if (mapped.serial) seen.add(mapped.serial.toLowerCase())
-      const isUpdate = !!existingSerials.data?.has(mapped.serial.toLowerCase())
+      if (mapped.serial) seen.add(normalizeSerial(mapped.serial))
+      const isUpdate = !!existingSerials.data?.has(normalizeSerial(mapped.serial))
       return { rowIndex, data: normalizeAssetImportRow(mapped), errors, isUpdate }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -172,10 +191,9 @@ export function ImportWizard({ target }: { target: ImportTarget }) {
         })
         setResult(result)
       } else {
-        const result = await commitAsset.mutateAsync({
-          filename,
-          rows: assetRows.filter((r) => r.errors.length === 0).map((r) => r.data),
-        })
+        const committed = assetRows.filter((r) => r.errors.length === 0)
+        const result = await commitAsset.mutateAsync({ filename, rows: committed.map((r) => r.data) })
+        setSheetRowNumbers(committed.map((r) => r.rowIndex + 2))
         setResult(result)
       }
       setStep('done')
@@ -189,13 +207,17 @@ export function ImportWizard({ target }: { target: ImportTarget }) {
 
   if (step === 'done' && result) {
     return (
-      <div className="card mx-auto max-w-md space-y-3 text-center">
+      <div className="card mx-auto max-w-2xl space-y-3 text-center">
         <h2 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
           Import complete
         </h2>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
-          {result.created} created, {result.updated} updated.
+          {result.created} created, {result.updated} updated
+          {'unchanged' in result && `, ${result.unchanged} already up to date`}.
         </p>
+        {'issues' in result && result.issues.length > 0 && (
+          <ImportIssues issues={result.issues} sheetRows={sheetRowNumbers} />
+        )}
         <button className="btn-primary" onClick={() => navigate(TARGET_PATH[target])}>
           View {TARGET_LABELS[target]}
         </button>
@@ -296,9 +318,16 @@ export function ImportWizard({ target }: { target: ImportTarget }) {
           <div className="card">
             <div className="flex flex-wrap gap-4 text-sm">
               <Stat label="To create" value={createCount} />
-              <Stat label="To update" value={updateCount} />
+              <Stat label={isBulk ? 'To update' : 'Already in the ledger'} value={updateCount} />
               <Stat label="Errors (skipped)" value={errorRows.length} tone={errorRows.length ? 'warn' : undefined} />
             </div>
+            {!isBulk && (
+              <p className="mt-3 text-xs text-neutral-500">
+                For devices already in the ledger, only a changed Name, Category or Location is updated; empty
+                cells are ignored. An import never changes a device&apos;s status or who it&apos;s assigned to —
+                any difference is listed afterwards for you to handle on the device itself.
+              </p>
+            )}
           </div>
 
           <div className="card overflow-x-auto">
@@ -333,7 +362,7 @@ export function ImportWizard({ target }: { target: ImportTarget }) {
                       {r.errors.length > 0 ? (
                         <span className="text-red-600 dark:text-red-400">{r.errors.join('; ')}</span>
                       ) : r.isUpdate ? (
-                        <span className="text-blue-600 dark:text-blue-400">Update</span>
+                        <span className="text-blue-600 dark:text-blue-400">{isBulk ? 'Update' : 'Existing'}</span>
                       ) : (
                         <span className="text-green-600 dark:text-green-400">Create</span>
                       )}
@@ -372,6 +401,67 @@ export function ImportWizard({ target }: { target: ImportTarget }) {
         </div>
       )}
     </div>
+  )
+}
+
+export function ImportIssues({ issues, sheetRows }: { issues: AssetImportIssue[]; sheetRows: number[] }) {
+  const notApplied = issues.filter((i) => i.kind === 'not_applied')
+  const rejected = issues.filter((i) => i.kind === 'rejected')
+  return (
+    <div className="space-y-3 text-left text-sm">
+      {notApplied.length > 0 && (
+        <IssueList
+          title={`Not applied — ${notApplied.length} status or assignment difference${notApplied.length === 1 ? '' : 's'}`}
+          note="Imports never change status or assignment. If the sheet is right, use Provide, Transfer or Collect on the device."
+          issues={notApplied}
+          sheetRows={sheetRows}
+        />
+      )}
+      {rejected.length > 0 && (
+        <IssueList
+          title={`Skipped — ${rejected.length} row${rejected.length === 1 ? '' : 's'}`}
+          issues={rejected}
+          sheetRows={sheetRows}
+        />
+      )}
+    </div>
+  )
+}
+
+function IssueList({
+  title,
+  note,
+  issues,
+  sheetRows,
+}: {
+  title: string
+  note?: string
+  issues: AssetImportIssue[]
+  sheetRows: number[]
+}) {
+  return (
+    <section aria-label={title} className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-900/50 dark:bg-amber-950/20">
+      <h3 className="font-medium text-amber-800 dark:text-amber-300">{title}</h3>
+      {note && <p className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-400">{note}</p>}
+      <ul className="mt-2 space-y-1 text-xs">
+        {issues.map((i, n) => (
+          <li key={n}>
+            <span className="text-neutral-400">Row {sheetRows[i.row - 1] ?? i.row}</span>{' '}
+            {i.asset_id && i.collection ? (
+              <Link className="font-mono underline" to={`${DEVICE_PATH[i.collection]}/${i.asset_id}`}>
+                {i.serial}
+              </Link>
+            ) : (
+              <span className="font-mono">{i.serial || '(no serial)'}</span>
+            )}
+            {': '}
+            {i.field
+              ? `${i.field === 'status' ? 'status' : 'assigned to'} is "${i.current ?? ''}", sheet says "${i.requested ?? ''}"`
+              : i.reason}
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }
 

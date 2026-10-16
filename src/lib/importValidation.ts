@@ -1,4 +1,5 @@
 import type { AssetStatus } from '../types/database.types'
+import { normalizeSerial } from './serial'
 
 export const ASSET_STATUS_VALUES: AssetStatus[] = [
   'available',
@@ -31,8 +32,8 @@ export interface NormalizedAssetImportRow {
  * Validates one mapped row against the sheet's own serial set — a
  * duplicate serial *within the sheet itself* is a sheet error, distinct
  * from "this serial already exists in the DB" (which is a legitimate
- * update, not an error). Case-insensitive: "ABC123" and "abc123" in the
- * same sheet are almost certainly the same physical tag, not two assets.
+ * update, not an error). serialsSeenSoFar holds normalizeSerial() keys, so
+ * "ABC123", "abc123" and " ABC123 " in the same sheet are one device.
  */
 export function validateAssetImportRow(
   row: RawAssetImportRow,
@@ -48,7 +49,7 @@ export function validateAssetImportRow(
   if (!category) errors.push('Missing category')
   if (!serial) {
     errors.push('Missing serial')
-  } else if (serialsSeenSoFar.has(serial.toLowerCase())) {
+  } else if (serialsSeenSoFar.has(normalizeSerial(serial))) {
     errors.push('Duplicate serial in this sheet')
   }
   if (status && !ASSET_STATUS_VALUES.includes(status.toLowerCase() as AssetStatus)) {

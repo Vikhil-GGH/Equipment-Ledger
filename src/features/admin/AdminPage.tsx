@@ -1,8 +1,9 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { getErrorMessage } from '../../lib/errors'
 import type { UserRole } from '../../types/database.types'
 import { useAuth } from '../auth/useAuth'
-import { useRemoveUser, useUpdateUserRole, useUsersList, type ProfileRow } from './api'
+import { useRemoveUser, useSerialDuplicates, useUpdateUserRole, useUsersList, type ProfileRow } from './api'
 import { usePossibleDuplicates, useRegisterAvailable } from '../register/api'
 
 const ROLES: UserRole[] = ['admin', 'editor', 'viewer', 'scanner']
@@ -39,6 +40,7 @@ export function AdminPage() {
       </div>
 
       <PossibleDuplicateEmployees />
+      <SerialDuplicates />
     </div>
   )
 }
@@ -60,6 +62,51 @@ function PossibleDuplicateEmployees() {
             <li key={`${p.employee_id}-${p.other_employee_id}`}>
               <span className="font-medium">{p.full_name}</span> and <span className="font-medium">{p.other_full_name}</span>{' '}
               <span className="text-xs text-neutral-500">— {p.reason}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+const DEVICE_PATH = {
+  serialized_assets: '/serialized-assets',
+  active_laptops_np: '/active-laptops-np',
+  monitors: '/monitors',
+  other_equipment: '/other-equipment',
+} as const
+const COLLECTION_LABEL = {
+  serialized_assets: 'Laptop Inventory',
+  active_laptops_np: 'Active Laptops',
+  monitors: 'Monitors',
+  other_equipment: 'Other Equipment',
+} as const
+
+/** Read-only review list (20260901000027). Nothing is merged or deleted automatically. */
+function SerialDuplicates() {
+  const { data: rows } = useSerialDuplicates()
+  if (rows === null || rows === undefined) return null
+  return (
+    <div className="card">
+      <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">Devices sharing a serial number</h2>
+      <p className="mb-2 text-xs text-neutral-500">
+        Recorded before serial numbers were checked. For review only — they keep working, nothing is merged or deleted,
+        and no new device can take these serials.
+      </p>
+      {!rows.length ? (
+        <p className="text-sm text-neutral-500">None found.</p>
+      ) : (
+        <ul className="space-y-1 text-sm">
+          {rows.map((r) => (
+            <li key={r.asset_id}>
+              <Link className="font-mono underline" to={`${DEVICE_PATH[r.collection]}/${r.asset_id}`}>
+                {r.serial.trim() ? JSON.stringify(r.serial) : '(blank)'}
+              </Link>{' '}
+              <span className="text-xs text-neutral-500">
+                — {COLLECTION_LABEL[r.collection]}, {r.status}
+                {r.assigned_to ? `, ${r.assigned_to}` : ''} · {r.reason}
+              </span>
             </li>
           ))}
         </ul>

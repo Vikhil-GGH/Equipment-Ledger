@@ -91,7 +91,9 @@ async function expectNoAccess(c, label) {
     ['onboarding_assign_device', { p_onboarding_id: ZERO, p_serial: PROBE }],
     ['create_bulk_item', { p_name: null, p_category: null }],
     ['perform_bulk_action', { p_item_id: ZERO, p_action: 'receive_stock', p_quantity: 1 }],
-    ['commit_asset_import', { p_collection: 'serialized_assets', p_filename: PROBE, p_rows: [{ serial: null, name: null, category: null }] }],
+    // p_rows is not a list: fails before any row is read (since 027 a row
+    // with a missing serial is reported and logged, not an error).
+    ['commit_asset_import', { p_collection: 'serialized_assets', p_filename: PROBE, p_rows: PROBE }],
     ['commit_bulk_import', { p_filename: PROBE, p_rows: [{ name: null, category: null, quantity: 1 }] }],
     ['create_employee', { p_full_name: '' }],
     ['issue_equipment', { p_employee_id: ZERO, p_collection: 'serialized_assets', p_asset_id: ZERO }],

@@ -2,6 +2,31 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
 import type { AssetCollection, Json } from '../../types/database.types'
 import type { NormalizedAssetImportRow, NormalizedBulkImportRow } from '../../lib/importValidation'
+import { fetchAllRows, type PagedSource } from '../../lib/fetchAllRows'
+import { normalizeSerial } from '../../lib/serial'
+
+const LAPTOP_TABLES: AssetCollection[] = ['serialized_assets', 'active_laptops_np']
+
+/** One reported row of an asset import (commit_asset_import, 20260901000027). */
+export interface AssetImportIssue {
+  row: number
+  serial: string
+  kind: 'rejected' | 'not_applied'
+  reason: string
+  collection?: AssetCollection
+  asset_id?: string
+  field?: 'status' | 'assigned_to'
+  current?: string | null
+  requested?: string
+}
+
+export interface AssetImportResult {
+  created: number
+  updated: number
+  unchanged: number
+  rejected: number
+  issues: AssetImportIssue[]
+}
 
 // NormalizedAssetImportRow/NormalizedBulkImportRow are plain string/number
 // records but, as named interfaces, don't structurally satisfy the `Json`
@@ -13,19 +38,26 @@ function toJson<T>(rows: T[]): Json {
 }
 
 /**
- * All existing serials for a collection, fetched once per import session
- * to classify rows as create-vs-update in the preview. Fine for an
- * internal-tool inventory (hundreds to low thousands of rows); the
- * authoritative match still happens server-side at commit time regardless.
+ * Existing serials (normalized, src/lib/serial.ts) for the preview's
+ * create-vs-existing label. The two laptop tables are one serial space — a
+ * laptop moved to Active Laptops is still "existing" for a Laptop
+ * Inventory import — and every row is read (paged). The authoritative
+ * match happens server-side at commit time regardless.
  */
 export function useExistingSerials(collection: AssetCollection, enabled = true) {
   return useQuery({
     queryKey: ['import', 'existing-serials', collection],
     enabled,
     queryFn: async () => {
-      const { data, error } = await supabase.from(collection).select('serial')
-      if (error) throw error
-      return new Set(data.map((r) => r.serial.toLowerCase()))
+      const tables: AssetCollection[] = LAPTOP_TABLES.includes(collection) ? LAPTOP_TABLES : [collection]
+      const keys = new Set<string>()
+      for (const table of tables) {
+        const { rows } = await fetchAllRows<{ id: string; serial: string }>(supabase as unknown as PagedSource, table, {
+          columns: 'id, serial',
+        })
+        for (const r of rows) keys.add(normalizeSerial(r.serial))
+      }
+      return keys
     },
   })
 }
@@ -58,10 +90,13 @@ export function useCommitAssetImport(collection: AssetCollection) {
         p_rows: toJson(rows),
       })
       if (error) throw error
-      return data as { created: number; updated: number }
+      return data as unknown as AssetImportResult
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['assets', collection] })
+      // A Laptop Inventory import can update a laptop in either laptop table.
+      for (const table of LAPTOP_TABLES.includes(collection) ? LAPTOP_TABLES : [collection]) {
+        void queryClient.invalidateQueries({ queryKey: ['assets', table] })
+      }
       void queryClient.invalidateQueries({ queryKey: ['stats', collection] })
       void queryClient.invalidateQueries({ queryKey: ['import'] })
     },

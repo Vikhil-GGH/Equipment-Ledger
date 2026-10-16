@@ -1,64 +1,67 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
+import { fetchAllRows, type PagedSource } from '../../lib/fetchAllRows'
 import type { Json } from '../../types/database.types'
+import {
+  BACKUP_FORMAT_VERSION,
+  BACKUP_TABLES,
+  OPTIONAL_BACKUP_TABLES,
+  restorePayload,
+  type BackupFile,
+  type BackupTable,
+} from './backupFile'
 
-// Every table a restore can put back. Order doesn't matter for export (it's
-// plain parallel SELECTs) but the payload's keys must match exactly what
-// restore_backup() reads (supabase/migrations/20260901000020_restore_backup_function.sql).
-const BACKUP_TABLES = [
-  'serialized_assets',
-  'active_laptops_np',
-  'monitors',
-  'other_equipment',
-  'bulk_items',
-  'serialized_asset_history',
-  'active_laptops_np_history',
-  'monitors_history',
-  'other_equipment_history',
-  'bulk_item_history',
-  'onboarding_checklists',
-  'offboarding_checklists',
-  'import_events',
-] as const
+export type { BackupFile } from './backupFile'
 
-// Added by 20260901000026; skipped when the connected database predates it.
-const OPTIONAL_BACKUP_TABLES = ['employees', 'equipment_issues'] as const
+const MISSING_TABLE = new Set(['PGRST205', '42P01'])
 
-export interface BackupFile {
-  exported_at: string
-  tables: Record<(typeof BACKUP_TABLES)[number], unknown[]>
+/**
+ * Every row of every table, read page by page and checked against the
+ * server's row counts (see fetchAllRows). Any failure throws, so no file is
+ * produced from a partial read. Tables are read one after another: a
+ * restore needs consistency more than speed.
+ */
+export async function exportBackup(client: PagedSource): Promise<BackupFile> {
+  const tables: BackupFile['tables'] = {}
+  const counts: NonNullable<BackupFile['counts']> = {}
+  const read = async (table: BackupTable) => {
+    const { rows, count } = await fetchAllRows<{ id: string }>(client, table)
+    tables[table] = rows
+    counts[table] = count
+  }
+  for (const table of BACKUP_TABLES) await read(table)
+  for (const table of OPTIONAL_BACKUP_TABLES) {
+    try {
+      await read(table)
+    } catch (err) {
+      if (MISSING_TABLE.has((err as { code?: string }).code ?? '')) continue
+      throw err
+    }
+  }
+  return { format_version: BACKUP_FORMAT_VERSION, exported_at: new Date().toISOString(), counts, tables }
 }
 
 export function useExportBackup() {
   return useMutation({
-    mutationFn: async (): Promise<BackupFile> => {
-      const results = await Promise.all(
-        BACKUP_TABLES.map((table) => supabase.from(table).select('*')),
-      )
-      const tables = {} as BackupFile['tables']
-      results.forEach((result, i) => {
-        if (result.error) throw result.error
-        tables[BACKUP_TABLES[i]] = (result.data ?? []) as unknown[]
-      })
-      for (const table of OPTIONAL_BACKUP_TABLES) {
-        const { data, error } = await supabase.from(table).select('*')
-        if (error && (error.code === 'PGRST205' || error.code === '42P01')) continue
-        if (error) throw error
-        ;(tables as Record<string, unknown[]>)[table] = data ?? []
-      }
-      return { exported_at: new Date().toISOString(), tables }
-    },
+    mutationFn: () => exportBackup(supabase as unknown as PagedSource),
   })
+}
+
+export interface RestoreResult {
+  counts: Record<string, number>
+  duplicate_serials: number
+  register_mismatches: number
 }
 
 export function useRestoreBackup() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (backup: BackupFile) => {
-      const { error } = await supabase.rpc('restore_backup', {
-        p_payload: backup.tables as Json,
+      const { data, error } = await supabase.rpc('restore_backup', {
+        p_payload: restorePayload(backup) as Json,
       })
       if (error) throw error
+      return data as unknown as RestoreResult | null
     },
     onSuccess: () => {
       // Everything in the ledger just changed at once — simpler and safer
