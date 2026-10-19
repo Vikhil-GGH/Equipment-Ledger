@@ -140,6 +140,8 @@ describe('Active Employees page', () => {
     expect(summary).toHaveTextContent('1 unchanged')
     expect(summary).toHaveTextContent('1 possible duplicates')
     expect(summary).toHaveTextContent('1 invalid')
+    await user.click(screen.getByRole('button', { name: /^All rows/ }))
+    expect(screen.getByText('Added as Active (Employee Status “Active”)')).toBeInTheDocument()
     expect(commit.mutateAsync).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Confirm import (1 row)' })).toBeEnabled()
     await user.click(screen.getByRole('button', { name: 'Confirm import (1 row)' }))

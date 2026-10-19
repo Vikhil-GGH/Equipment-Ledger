@@ -192,6 +192,11 @@ export function EmployeeImportModal({ directory, onClose }: { directory: Directo
                               {EMPLOYEE_COLUMNS.find((c) => c.key === k)!.header}: <span className="text-neutral-500 line-through">{a || '—'}</span> → {b}
                             </span>
                           ))}
+                          {r.kind === 'new' && r.fileStatus !== 'review' && (
+                            <span className="block text-neutral-600 dark:text-neutral-400">
+                              Added as {r.fileStatus === 'active' ? 'Active' : 'Inactive / Offboarded'} (Employee Status “{r.fields.hr_status}”)
+                            </span>
+                          )}
                           {needsStatusReview(r) && (
                             <span className="mt-1 block font-medium text-amber-800 dark:text-amber-300">
                               Employee Status “{r.fields.hr_status || 'blank'}” not recognised —{' '}
