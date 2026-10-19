@@ -32,6 +32,7 @@ describe('sidebar', () => {
       'Laptop Inventory',
       'Onboarding',
       'Offboarding',
+      'Active Employees',
       'Monitors',
       'Other Equipment',
       'Bulk Stock',

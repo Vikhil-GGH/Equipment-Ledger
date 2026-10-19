@@ -51,7 +51,7 @@ const rows = (n: number, prefix = 'r') =>
 
 function allTables(sizes: Partial<Record<string, number>> = {}) {
   const data: Record<string, Row[]> = {}
-  for (const t of [...BACKUP_TABLES, 'employees', 'equipment_issues']) data[t] = rows(sizes[t] ?? 3, t)
+  for (const t of [...BACKUP_TABLES, 'employees', 'equipment_issues', 'employee_history']) data[t] = rows(sizes[t] ?? 3, t)
   return data
 }
 
@@ -154,7 +154,7 @@ describe('exportBackup', () => {
   })
 
   it('a database before 026 (no employees/register tables) still exports the rest', async () => {
-    const { api } = fakeApi(allTables(), { missing: ['employees', 'equipment_issues'] })
+    const { api } = fakeApi(allTables(), { missing: ['employees', 'equipment_issues', 'employee_history'] })
     const backup = await exportBackup(api)
     expect(Object.keys(backup.tables)).toEqual([...BACKUP_TABLES])
   })

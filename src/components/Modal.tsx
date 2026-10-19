@@ -4,14 +4,17 @@ export function Modal({
   title,
   onClose,
   children,
+  wide = false,
 }: {
   title: string
   onClose: () => void
   children: ReactNode
+  /** For tables (e.g. an import preview). */
+  wide?: boolean
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4">
-      <div className="max-h-[90vh] w-full overflow-y-auto rounded-t-xl bg-white p-6 shadow-lg sm:max-w-md sm:rounded-xl dark:bg-neutral-900">
+      <div role="dialog" aria-label={title} className={`max-h-[90vh] w-full overflow-y-auto rounded-t-xl bg-white p-6 shadow-lg sm:rounded-xl dark:bg-neutral-900 ${wide ? 'sm:max-w-5xl' : 'sm:max-w-md'}`}>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-semibold text-neutral-900 dark:text-neutral-100">
             {title}

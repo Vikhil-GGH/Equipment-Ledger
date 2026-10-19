@@ -7,6 +7,7 @@ import { getErrorMessage } from '../../lib/errors'
 import { useAuth } from '../auth/useAuth'
 import { useCreateEmployee, useEmployeesNamed, useRegisterAvailable } from '../register/api'
 import { NewEmployeeChoice } from '../register/NewEmployeeChoice'
+import { EmployeeNameSuggestions } from '../employees/EmployeeNameSuggestions'
 import { normalizeName } from '../register/registerModel'
 import { useCreateOnboarding, useOnboardingList } from './api'
 import { onboardingProgress } from './onboardingProgress'
@@ -89,6 +90,8 @@ function StartOnboardingModal({ userId, onClose }: { userId: string; onClose: ()
           <input
             required
             autoFocus
+            list="employee-suggestions"
+            autoComplete="off"
             value={employeeName}
             onChange={(e) => {
               setEmployeeName(e.target.value)
@@ -97,6 +100,7 @@ function StartOnboardingModal({ userId, onClose }: { userId: string; onClose: ()
             className="input"
           />
         </label>
+        <EmployeeNameSuggestions id="employee-suggestions" />
         {registerAvailable && <NewEmployeeChoice name={employeeName} value={employeeChoice} onChange={setEmployeeChoice} />}
         {error && (
           <p role="alert" className="text-sm text-red-600 dark:text-red-400">

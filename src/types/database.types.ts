@@ -61,6 +61,8 @@ export type OffboardingLaptopOutcome = 'received' | 'retained' | 'decommissioned
 
 /** Onboarding Yes / No / N/A answers; null = not answered yet (20260901000026). */
 export type RequirementAnswer = 'yes' | 'no' | 'not_applicable'
+/** Active Employees directory (20260901000028). null = not in the directory. */
+export type EmploymentStatus = 'active' | 'inactive'
 
 /** Equipment register row status (20260901000026). */
 export type EquipmentIssueStatus =
@@ -660,12 +662,47 @@ export interface Database {
           id: string
           full_name: string
           name_key: string | null
+          /** Work email address (unique once trimmed and lower-cased — email_key). */
           email: string | null
           created_by: string | null
           created_at: string
+          // Active Employees directory (20260901000028); absent before it.
+          first_name?: string | null
+          last_name?: string | null
+          department?: string | null
+          job_title?: string | null
+          hr_status?: string | null
+          manager?: string | null
+          start_date?: string | null
+          employment_status?: EmploymentStatus | null
+          reactivation_pending?: boolean
+          status_changed_at?: string | null
+          updated_at?: string | null
+          email_key?: string | null
         }
-        Insert: { id?: string; full_name: string; email?: string | null; created_by?: string | null; created_at?: string }
-        Update: Partial<{ full_name: string; email: string | null }>
+        // Written only by the database functions (save_employee, imports, triggers).
+        Insert: { [key: string]: never }
+        Update: { [key: string]: never }
+        Relationships: []
+      }
+      employee_history: {
+        Row: {
+          id: string
+          employee_id: string
+          kind: 'created' | 'status' | 'details' | 'reactivation_pending'
+          from_status: EmploymentStatus | null
+          to_status: EmploymentStatus | null
+          changes: Json | null
+          source: string
+          note: string | null
+          onboarding_id: string | null
+          offboarding_id: string | null
+          import_filename: string | null
+          actor_user_id: string | null
+          at: string
+        }
+        Insert: { [key: string]: never }
+        Update: { [key: string]: never }
         Relationships: []
       }
       equipment_issues: {
@@ -847,6 +884,18 @@ export interface Database {
           p_filename: string
           p_rows: Json
         }
+        Returns: Json
+      }
+      save_employee: {
+        Args: { [key: string]: unknown; p_employee_id: string | null; p_fields: Json; p_status?: EmploymentStatus | null }
+        Returns: string
+      }
+      set_employment_status: {
+        Args: { [key: string]: unknown; p_employee_id: string; p_status: EmploymentStatus; p_note?: string | null }
+        Returns: boolean
+      }
+      commit_employee_import: {
+        Args: { [key: string]: unknown; p_filename: string; p_rows: Json }
         Returns: Json
       }
       restore_backup: {

@@ -18,6 +18,16 @@ vi.mock('./api', () => ({
   useEmployeesNamed: vi.fn(),
   useCreateEmployee: vi.fn(),
 }))
+// Name suggestions from the Active Employees directory (20260901000028).
+vi.mock('../employees/api', () => ({
+  useDirectoryAvailable: () => ({ data: true }),
+  useEmployeeDirectory: () => ({
+    data: [
+      { id: 'd1', full_name: 'Dana Field', employment_status: 'active' },
+      { id: 'd2', full_name: 'Old Timer', employment_status: 'inactive' },
+    ],
+  }),
+}))
 
 const createChecklist = vi.fn(async () => 'onb-new')
 const createEmployee = vi.fn(async () => 'emp-new')
@@ -47,11 +57,18 @@ async function start(name: string) {
   const user = userEvent.setup()
   renderPage()
   await user.click(screen.getByRole('button', { name: 'Start onboarding' }))
-  await user.type(screen.getByRole('textbox', { name: 'Employee name' }), name)
+  await user.type(screen.getByRole('combobox', { name: 'Employee name' }), name)
   return user
 }
 
 describe('Start onboarding with the employee register', () => {
+  it('suggests existing employees from the directory (onboarding: everyone, so rehires are found)', async () => {
+    renderPage()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Start onboarding' }))
+    const list = document.getElementById(screen.getByRole('combobox', { name: 'Employee name' }).getAttribute('list')!)!
+    expect([...list.querySelectorAll('option')].map((o) => o.value)).toEqual(['Dana Field', 'Old Timer'])
+  })
+
   it('a new name creates an employee record and links the checklist to it', async () => {
     const user = await start('Test Employee 70')
     expect(screen.getByText(/A new employee record will be created/)).toBeInTheDocument()

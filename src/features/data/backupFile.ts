@@ -19,8 +19,8 @@ export const BACKUP_TABLES = [
   'import_events',
 ] as const
 
-// Added by 20260901000026; skipped when the connected database predates it.
-export const OPTIONAL_BACKUP_TABLES = ['employees', 'equipment_issues'] as const
+// Added by 20260901000026 / 20260901000028; skipped when the connected database predates them.
+export const OPTIONAL_BACKUP_TABLES = ['employees', 'equipment_issues', 'employee_history'] as const
 
 export type BackupTable = (typeof BACKUP_TABLES)[number] | (typeof OPTIONAL_BACKUP_TABLES)[number]
 const KNOWN = new Set<string>([...BACKUP_TABLES, ...OPTIONAL_BACKUP_TABLES])

@@ -19,6 +19,7 @@ const WORKSPACE_ITEMS: NavItem[] = [
   { to: '/laptops', label: 'Laptop Inventory' },
   { to: '/onboarding', label: 'Onboarding' },
   { to: '/offboarding', label: 'Offboarding' },
+  { to: '/employees', label: 'Active Employees' },
   { to: '/monitors', label: 'Monitors' },
   { to: '/other-equipment', label: 'Other Equipment' },
   { to: '/bulk-stock', label: 'Bulk Stock' },

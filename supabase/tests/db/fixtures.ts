@@ -32,7 +32,7 @@ export const LEDGER_TABLES = [
  */
 export async function backupTables(db: Db): Promise<string[]> {
   const { rows } = await db.query<{ t: string }>(
-    `select t from unnest(array['employees', 'equipment_issues']) t where to_regclass('public.' || t) is not null`,
+    `select t from unnest(array['employees', 'equipment_issues', 'employee_history']) t where to_regclass('public.' || t) is not null`,
   )
   return [...LEDGER_TABLES, ...rows.map((r) => r.t)]
 }
