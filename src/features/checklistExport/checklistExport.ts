@@ -272,6 +272,36 @@ export function offboardingReturnColumns(): Column<Placed<OffboardingRow>>[] {
   ]
 }
 
+/**
+ * Equipment History (Offboarding): every CLOSED register row of the
+ * employee — returned, damaged, retained, lost, decommissioned, and also
+ * rows the Offboarding page leaves out (transferred to someone else,
+ * unassigned outside a return). Historical only: open rows stay in
+ * Equipment Returns, and nothing here feeds the summary's counts. Rows are
+ * tied to an employee only through the register's employee_id; rows the
+ * database could not match to one employee (employee_ambiguous, no
+ * employee_id) are never attached to anyone.
+ */
+export const isHistoryRow = (i: EquipmentIssue) => i.status !== 'open'
+
+export function offboardingHistoryColumns(): Column<Placed<OffboardingRow>>[] {
+  return [
+    { header: 'Record Type', width: 18, value: () => 'Historical record' },
+    { header: 'Employee Name', width: 26, value: (x) => x.record.employee_name },
+    { header: 'Offboarding Started', width: 18, format: DATE, value: (x) => dateOrNull(x.record.created_at) },
+    { header: 'Item Type', width: 16, value: (x) => itemTypeLabel(x.issue) },
+    { header: 'Item', width: 30, value: (x) => x.issue.description },
+    { header: 'Serial Number', width: 22, value: (x) => x.issue.serial },
+    { header: 'Quantity', width: 10, value: (x) => x.issue.quantity },
+    { header: 'Issued At', width: 18, format: DATETIME, value: (x) => dateOrNull(x.issue.issued_at) },
+    { header: 'Final Outcome', width: 28, value: (x) => ISSUE_STATUS_LABELS[x.issue.status] },
+    { header: 'Closed At', width: 18, format: DATETIME, value: (x) => dateOrNull(x.issue.closed_at) },
+    { header: 'Closed In This Offboarding', width: 22, value: (x) => (x.linked ? 'Yes' : 'No') },
+    { header: 'Shown On Offboarding Page', width: 22, value: (x) => (isReturnRow(x.issue) ? 'Yes' : 'No — history only') },
+    { header: 'Reason / Note', width: 30, value: (x) => x.issue.close_note },
+  ]
+}
+
 // -------------------------------------------------------------- workbooks
 function details(kind: string, view: ListView, records: number, items: number, itemLabel: string, exportedAt: Date, registerAvailable: boolean): [string, string][] {
   return [
@@ -301,13 +331,20 @@ export function buildOffboardingWorkbook(XLSX: typeof XLSXTypes, data: ExportDat
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, buildSheet(XLSX, offboardingSummaryColumns(data), data.records), 'Offboarding Summary')
   XLSX.utils.book_append_sheet(wb, buildSheet(XLSX, offboardingReturnColumns(), placed), 'Equipment Returns')
-  XLSX.utils.book_append_sheet(wb, buildDetailsSheet(XLSX, details('Offboarding', view, data.records.length, placed.length, 'Equipment rows', exportedAt, data.registerAvailable)), 'Export Details')
-  return { wb, records: data.records.length, items: placed.length }
+  const history = assignIssuesToRecords(data, (i) => i.offboarding_id, isHistoryRow)
+  XLSX.utils.book_append_sheet(wb, buildSheet(XLSX, offboardingHistoryColumns(), history), 'Equipment History')
+  const lines = details('Offboarding', view, data.records.length, placed.length, 'Equipment rows', exportedAt, data.registerAvailable)
+  lines.splice(7, 0, ['Equipment history rows', String(history.length)], [
+    'Equipment History',
+    'Historical records only: every closed register entry for the employee, including items transferred to someone else or unassigned outside a return (which the Offboarding page and Equipment Returns leave out). They are not counted in pending returns or progress. Entries the register could not tie to a single employee are not included.',
+  ])
+  XLSX.utils.book_append_sheet(wb, buildDetailsSheet(XLSX, lines), 'Export Details')
+  return { wb, records: data.records.length, items: placed.length, history: history.length }
 }
 
 export const exportFilename = (kind: 'Onboarding' | 'Offboarding', d: Date) => `${kind}_${fileDate(d)}.xlsx`
 
-/** Workbook bytes with frozen header rows on the two data sheets. */
+/** Workbook bytes with frozen header rows on every data sheet. */
 export function workbookBytes(XLSX: typeof XLSXTypes, wb: XLSXTypes.WorkBook) {
-  return writeXlsx(XLSX, wb, wb.SheetNames.slice(0, 2))
+  return writeXlsx(XLSX, wb, wb.SheetNames.filter((n) => n !== 'Export Details'))
 }

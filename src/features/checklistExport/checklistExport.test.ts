@@ -249,6 +249,45 @@ describe('Offboarding export', () => {
     expect(returns.find((r) => r['Serial Number'] === 'DOCK-1')).toBeUndefined()
   })
 
+  it('Equipment History: every closed entry incl. transferred/unassigned, labelled historical, never counted as pending', async () => {
+    const emp = 'emp-h'
+    const rec = offboarding(1, { employee_id: emp, removed_access: true })
+    const issues = [
+      issue(emp, { serial: 'LAP-NOW' }), // open → Equipment Returns only
+      issue(emp, { serial: 'LAP-RET', status: 'returned', closed_at: ts(15), offboarding_id: rec.id }),
+      issue(emp, { serial: 'LAP-DMG', status: 'returned_damaged', closed_at: ts(15), offboarding_id: rec.id }),
+      issue(emp, { item_kind: 'bulk', asset_collection: null, asset_id: null, description: 'Headset', serial: null, quantity: 2, status: 'retained_authorized', close_note: 'Approved', closed_at: ts(15) }),
+      issue(emp, { asset_collection: 'monitors', description: 'Dell 24 Monitor', serial: 'MON-L', status: 'lost', closed_at: ts(16) }),
+      issue(emp, { serial: 'LAP-DEC', status: 'decommissioned', closed_at: ts(16) }),
+      issue(emp, { serial: 'LAP-TRF', status: 'transferred', closed_at: ts(9) }), // went to someone else
+      issue(emp, { asset_collection: 'other_equipment', description: 'USB-C Dock', serial: 'DOCK-U', status: 'unassigned', closed_at: ts(8) }),
+    ]
+    // Rows the register could not tie to one employee have no employee_id: never attached.
+    const ambiguous = { ...issue('x', { serial: 'AMBIG-1', status: 'returned', closed_at: ts(5) }), employee_id: null, employee_ambiguous: true }
+    const { api } = fakeApi({ offboarding_checklists: [rec], employees: [], equipment_issues: [...issues, ambiguous] })
+    const data = await loadExportData<OffboardingRow>(api, 'offboarding_checklists', VIEW, offboardingProgress)
+    const built = buildOffboardingWorkbook(XLSX, data, VIEW, new Date())
+    const read = roundTrip(built.wb)
+    const history = sheetRows(read, 'Equipment History')
+    expect(built.history).toBe(7)
+    expect(history.map((r) => r['Serial Number'] || r.Item).sort()).toEqual(['DOCK-U', 'Headset', 'LAP-DEC', 'LAP-DMG', 'LAP-RET', 'LAP-TRF', 'MON-L'])
+    expect(history.every((r) => r['Record Type'] === 'Historical record')).toBe(true)
+    expect(history.find((r) => r['Serial Number'] === 'LAP-TRF')).toMatchObject({ 'Final Outcome': 'Transferred to someone else', 'Shown On Offboarding Page': 'No — history only', 'Closed In This Offboarding': 'No' })
+    expect(history.find((r) => r['Serial Number'] === 'DOCK-U')).toMatchObject({ 'Item Type': 'Other equipment', 'Final Outcome': 'Unassigned (outside a return)' })
+    expect(history.find((r) => r.Item === 'Headset')).toMatchObject({ Quantity: 2, 'Final Outcome': 'Retained — authorized', 'Reason / Note': 'Approved' })
+    expect(history.find((r) => r['Serial Number'] === 'LAP-RET')).toMatchObject({ 'Closed In This Offboarding': 'Yes', 'Shown On Offboarding Page': 'Yes' })
+    const closedAt = history.find((r) => r['Serial Number'] === 'LAP-TRF')!['Closed At']
+    expect(closedAt instanceof Date || typeof closedAt === 'number').toBe(true) // a real Excel date, not text
+    expect(history.some((r) => r['Serial Number'] === 'AMBIG-1')).toBe(false)
+    expect(history.some((r) => r['Serial Number'] === 'LAP-NOW')).toBe(false)
+
+    // Counts and progress are exactly as without the history sheet.
+    const s = sheetRows(read, 'Offboarding Summary')[0]
+    expect(s).toMatchObject({ 'Equipment Items': 6, 'Items Processed': 5, 'Pending Return': 1, 'Steps Completed': '1/2', 'Checklist Completion': 0.5 })
+    expect(sheetRows(read, 'Equipment Returns')).toHaveLength(6)
+    expect(sheetRows(read, 'Equipment Returns').some((r) => ['LAP-TRF', 'DOCK-U'].includes(r['Serial Number'] as string))).toBe(false)
+  })
+
   it('a database without the employee register: records export, equipment columns stay blank', async () => {
     const { api } = fakeApi({ offboarding_checklists: [offboarding(1)] }, { missing: ['employees', 'equipment_issues'] })
     const data = await loadExportData<OffboardingRow>(api, 'offboarding_checklists', VIEW, offboardingProgress)
@@ -267,7 +306,7 @@ describe('workbook format and safety', () => {
     const on = buildOnboardingWorkbook(XLSX, await loadExportData<OnboardingRow>(api, 'onboarding_checklists', VIEW, onboardingProgress), VIEW, new Date()).wb
     const off = buildOffboardingWorkbook(XLSX, await loadExportData<OffboardingRow>(api, 'offboarding_checklists', VIEW, offboardingProgress), VIEW, new Date()).wb
     expect(on.SheetNames).toEqual(['Onboarding Summary', 'Issued Equipment', 'Export Details'])
-    expect(off.SheetNames).toEqual(['Offboarding Summary', 'Equipment Returns', 'Export Details'])
+    expect(off.SheetNames).toEqual(['Offboarding Summary', 'Equipment Returns', 'Equipment History', 'Export Details'])
     expect(headers(on, 'Onboarding Summary').slice(0, 6)).toEqual(['Employee Name', 'Employee Record', 'Employee Email', 'Onboarding Status', 'Steps Completed', 'Checklist Completion'])
     expect(headers(off, 'Equipment Returns')).toContain('Return Outcome')
 
@@ -277,7 +316,9 @@ describe('workbook format and safety', () => {
       const xml = (n: number) => new TextDecoder().decode(XLSX.CFB.find(zip, `/xl/worksheets/sheet${n}.xml`)!.content as Uint8Array)
       expect(xml(1)).toContain('<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>')
       expect(xml(2)).toContain('state="frozen"')
-      expect(xml(3)).not.toContain('state="frozen"')
+      const detailsSheet = wb.SheetNames.indexOf('Export Details') + 1
+      expect(xml(detailsSheet)).not.toContain('state="frozen"')
+      if (wb.SheetNames.includes('Equipment History')) expect(xml(3)).toContain('state="frozen"')
       expect(xml(1)).toMatch(/<autoFilter ref="A1:[A-Z]+2"\/>/)
       expect(xml(1)).toMatch(/<col [^>]*width="2[0-9.]+"/)
       // Still a valid workbook after the patch.

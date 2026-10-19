@@ -93,6 +93,12 @@ describe('checklist Excel exports match the staging records (read-only)', () => 
     const returns = rows(read, 'Equipment Returns')
     expect(returns.filter((x) => x.Pending === 'Yes').length).toBeLessThanOrEqual(pendingTotal)
     for (const x of returns) expect(['Yes', 'No']).toContain(x.Pending)
+    // Equipment History: every closed register entry of these employees, labelled historical.
+    const ids = [...new Set(data.records.map((r) => r.employee_id).filter(Boolean))] as string[]
+    const closed = ids.length ? await count('equipment_issues', (q) => q.in('employee_id', ids).neq('status', 'open')) : 0
+    const history = rows(read, 'Equipment History')
+    expect(history).toHaveLength(closed)
+    for (const h of history) expect(h['Record Type']).toBe('Historical record')
     save(exportFilename('Offboarding', new Date()), wb)
   })
 })
