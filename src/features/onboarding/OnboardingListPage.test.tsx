@@ -107,7 +107,8 @@ describe('OnboardingListPage table', () => {
     await user.click(screen.getByRole('button', { name: /Steps completed/ }))
     expect(namesInOrder()[0]).toBe('Test Employee 30')
     await user.click(screen.getByRole('button', { name: /Status/ }))
-    expect(namesInOrder()).toEqual(['Test Employee 30', 'Test Employee 32', 'Test Employee 31', 'Test Employee 93'])
+    // Both Pending: equal status, so by name (then id).
+    expect(namesInOrder()).toEqual(['Test Employee 30', 'Test Employee 31', 'Test Employee 32', 'Test Employee 93'])
 
     await user.click(screen.getByRole('button', { name: /Start date/ }))
     expect(namesInOrder()[0]).toBe('Test Employee 93')

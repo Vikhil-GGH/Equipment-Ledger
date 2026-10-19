@@ -153,6 +153,22 @@ describe('Onboarding export', () => {
     expect(details).toEqual(expect.arrayContaining([['Search', 'ann'], ['Status filter', 'Pending'], ['Sorted by', 'Employee name (ascending)']]))
   })
 
+  it('records started in the same instant come out in the same order as the list: by name, then id', async () => {
+    const same = '2026-10-15T15:20:33.788Z'
+    // Fetched in id order (as the export pages), which differs from the name order.
+    const records = [
+      onboarding(1, { id: 'onb-a', employee_name: 'Test Employee 32', created_at: same }),
+      onboarding(2, { id: 'onb-b', employee_name: 'Test Employee 30', created_at: same }),
+      onboarding(3, { id: 'onb-c', employee_name: 'Test Employee 31', created_at: same }),
+      onboarding(4, { id: 'onb-d', employee_name: 'Later', created_at: '2026-10-16T09:00:00Z' }),
+    ]
+    const { api } = fakeApi({ onboarding_checklists: records, employees: [], equipment_issues: [] })
+    const data = await loadExportData<OnboardingRow>(api, 'onboarding_checklists', VIEW, onboardingProgress)
+    const exported = sheetRows(buildOnboardingWorkbook(XLSX, data, VIEW, new Date()).wb, 'Onboarding Summary').map((r) => r['Employee Name'])
+    expect(exported).toEqual(['Later', 'Test Employee 30', 'Test Employee 31', 'Test Employee 32'])
+    expect(exported).toEqual(sortChecklistRows([...records].reverse(), onboardingProgress, 'started', 'desc').map((r) => r.employee_name))
+  })
+
   it('multiple laptops and accessories: one summary row, one issued-equipment row per item, history kept as history', async () => {
     const emp = 'emp-1'
     const rec = onboarding(1, { employee_id: emp, requested_laptop: '14-inch, 16 GB', charger_required: 'yes', headset_required: 'not_applicable', identity_created: true, equipment_assigned: true })

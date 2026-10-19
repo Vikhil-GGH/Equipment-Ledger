@@ -66,7 +66,7 @@ describe('sortOnboardingRows', () => {
     ])
   })
 
-  it('sorts by progress and by status, ties newest first', () => {
+  it('sorts by progress and by status; equal values by name, then id', () => {
     expect(names(sortOnboardingRows(rows, 'progress', 'desc'))).toEqual([
       'Test Employee 93',
       'test employee 4',
@@ -75,10 +75,27 @@ describe('sortOnboardingRows', () => {
     ])
     expect(names(sortOnboardingRows(rows, 'status', 'asc'))).toEqual([
       'Test Employee 30',
+      'test employee 4', // both Pending: by name (natural order: 4 before 31)
       'Test Employee 31',
-      'test employee 4',
       'Test Employee 93',
     ])
+  })
+
+  it('records started in the same instant are ordered by name then id, in either direction — screen and export agree', () => {
+    const same = '2026-10-15T15:20:33.788Z'
+    const tied = [
+      { ...row('Test Employee 32', same, [false, false, false, false]), id: 'c' },
+      { ...row('Test Employee 30', same, [false, false, false, false]), id: 'b' },
+      { ...row('Test Employee 30', same, [false, false, false, false]), id: 'a' }, // same name too: by id
+      { ...row('Test Employee 31', same, [false, false, false, false]), id: 'd' },
+    ]
+    const ids = (r: OnboardingRow[]) => r.map((x) => x.id)
+    for (const direction of ['asc', 'desc'] as const) {
+      expect(ids(sortOnboardingRows(tied, 'started', direction))).toEqual(['a', 'b', 'd', 'c'])
+      // Input order never matters.
+      expect(ids(sortOnboardingRows([...tied].reverse(), 'started', direction))).toEqual(['a', 'b', 'd', 'c'])
+    }
+    expect(ids(sortOnboardingRows(tied, 'name', 'desc'))).toEqual(['c', 'd', 'a', 'b'])
   })
 
   it('does not mutate its input', () => {

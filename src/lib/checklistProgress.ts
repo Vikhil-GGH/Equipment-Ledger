@@ -63,13 +63,16 @@ export function sortChecklistRows<T extends ChecklistRecord>(
     const p = progressOf(r)
     return STATUS_RANK[checklistStatus(p.done, p.total)]
   }
-  const byStarted = (a: T, b: T) => a.created_at.localeCompare(b.created_at)
+  const byName = (a: T, b: T) => a.employee_name.localeCompare(b.employee_name, undefined, { sensitivity: 'base', numeric: true })
   const compare: Record<ChecklistSortKey, (a: T, b: T) => number> = {
-    name: (a, b) => a.employee_name.localeCompare(b.employee_name, undefined, { sensitivity: 'base', numeric: true }),
-    started: byStarted,
+    name: byName,
+    started: (a, b) => a.created_at.localeCompare(b.created_at),
     progress: (a, b) => progressOf(a).done - progressOf(b).done,
     status: (a, b) => rank(a) - rank(b),
   }
-  // Ties fall back to most recently started first, whatever the main order.
-  return [...rows].sort((a, b) => sign * compare[key](a, b) || -byStarted(a, b))
+  // The chosen column (in the chosen direction) decides; equal values are
+  // always ordered by employee name, then record id — so the list on screen
+  // and the Excel export agree even for records started in the same instant.
+  const byId = (a: T, b: T) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+  return [...rows].sort((a, b) => sign * compare[key](a, b) || byName(a, b) || byId(a, b))
 }
