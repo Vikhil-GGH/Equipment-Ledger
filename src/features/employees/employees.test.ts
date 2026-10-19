@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as XLSX from 'xlsx'
-import { DEFAULT_VIEW, displayNames, distinctValues, filterEmployees, paginate, statusFromHr, type DirectoryEmployee } from './directoryModel'
+import { DEFAULT_VIEW, displayNames, distinctValues, filterEmployees, paginate, type DirectoryEmployee } from './directoryModel'
+import { HR_STATUS_MAPPING, classifyHrStatus } from './employeeStatusMapping'
 import { EMPLOYEE_COLUMNS, buildPreview, commitPayload, linkRow, mapHeaders, parseDate, previewCounts } from './employeeImport'
 import { buildEmployeeWorkbook, employeeExportFilename, employeeWorkbookBytes } from './exportEmployees'
 
@@ -96,9 +97,11 @@ describe('12: search, filters, sorting, pagination', () => {
     expect(displayNames({ first_name: null, last_name: null, full_name: 'Mary Ann Van Dyke' })).toEqual({ first: 'Mary Ann Van Dyke', last: '', fullOnly: true })
   })
 
-  it('employee status text → employment', () => {
-    for (const s of ['Active', '', 'Leave of Absence', 'On Leave', 'Full-time']) expect(statusFromHr(s), s).toBe('active')
-    for (const s of ['Inactive', 'Terminated', 'terminated - voluntary', 'Offboarded', 'Resigned']) expect(statusFromHr(s), s).toBe('inactive')
+  it('Employee Status uses the explicit mapping; anything else is "review", never a guess', () => {
+    for (const s of ['Active', '  ACTIVE ', 'active']) expect(classifyHrStatus(s), s).toBe('active')
+    for (const s of ['Inactive', 'Terminated', 'Offboarded', 'Separated', 'Resigned', 'Retired', 'Former  Employee']) expect(classifyHrStatus(s), s).toBe('inactive')
+    for (const s of ['', '   ', 'Leave of Absence', 'On Leave', 'Full-time', 'Terminated - Voluntary', 'Activ', 'Pending start', null, undefined]) expect(classifyHrStatus(s), String(s)).toBe('review')
+    expect(Object.keys(HR_STATUS_MAPPING)).toEqual(['active', 'inactive', 'terminated', 'offboarded', 'separated', 'resigned', 'retired', 'former employee'])
   })
 })
 
@@ -199,6 +202,33 @@ describe('Excel import preview', () => {
     expect(commitPayload(rows)[2]).toMatchObject({ employee_id: offboarded.id, status: 'active' })
   })
 
+  it('an unrecognised Employee Status is flagged: new rows default to Not in directory, existing employees keep their status', () => {
+    const active = emp({ email: 'b@x.invalid' })
+    const offboarded = emp({ email: 'c@x.invalid', employment_status: 'inactive' })
+    const rows = buildPreview(
+      [
+        excelRow('New', 'Leave', 'n@x.invalid', { 'Employee Status': 'Leave of Absence' }),
+        excelRow('New', 'Blank', 'm@x.invalid', { 'Employee Status': '' }),
+        excelRow(active.first_name!, active.last_name!, 'b@x.invalid', { 'Employee Status': 'Terminated - Voluntary' }),
+        excelRow(offboarded.first_name!, offboarded.last_name!, 'c@x.invalid', { 'Employee Status': 'Rehired?' }),
+      ],
+      HEADERS,
+      [active, offboarded],
+    )
+    expect(rows.map((r) => [r.fileStatus, r.kind, r.statusChange])).toEqual([
+      ['review', 'new', undefined],
+      ['review', 'new', undefined],
+      ['review', 'update', undefined], // the text changes, the employment status does not
+      ['review', 'update', undefined],
+    ])
+    expect(previewCounts(rows)).toMatchObject({ statusReview: 4, statusChanges: 0 })
+    const payload = commitPayload(rows)
+    expect(payload.map((p) => p.status)).toEqual([undefined, undefined, undefined, undefined])
+    expect(payload[2]).toMatchObject({ fields: { hr_status: 'Terminated - Voluntary' } }) // text kept exactly
+    rows[0].chosenStatus = 'active' // an explicit choice in the preview
+    expect(commitPayload(rows)[0].status).toBe('active')
+  })
+
   it('2: thousands of rows from a real .xlsx file', () => {
     const sheet = XLSX.utils.json_to_sheet(Array.from({ length: 3000 }, (_, i) => excelRow(`F${i}`, `L${i}`, `p${i}@x.invalid`, { 'Employee start date': 45000 + (i % 300) })), { header: HEADERS })
     const wb = XLSX.utils.book_new()
@@ -208,7 +238,7 @@ describe('Excel import preview', () => {
     const started = performance.now()
     const rows = buildPreview(parsed, HEADERS, Array.from({ length: 2000 }, () => emp()))
     expect(performance.now() - started).toBeLessThan(3000)
-    expect(previewCounts(rows)).toMatchObject({ total: 3000, new: 3000, invalid: 0, toApply: 3000 })
+    expect(previewCounts(rows)).toMatchObject({ total: 3000, new: 3000, invalid: 0, statusReview: 0, toApply: 3000 })
   })
 })
 

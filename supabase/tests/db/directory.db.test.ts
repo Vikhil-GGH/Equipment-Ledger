@@ -104,7 +104,7 @@ describe.skipIf(isStaging)('028 applied to existing data', () => {
 describe.skipIf(isStaging)('Excel import', () => {
   it('1: a valid list creates Active employees with every field, logged as imported', tx(async () => {
     await actAs(db, EDITOR)
-    const r = await importRows([1, 2, 3].map((i) => ({ row: i, action: 'create', fields: person(i) })))
+    const r = await importRows([1, 2, 3].map((i) => ({ row: i, action: 'create', fields: person(i), status: 'active' })))
     expect(r).toMatchObject({ created: 3, updated: 0, unchanged: 0, conflicts: [] })
     const e = await one(`select * from employees where email_key = 'first1.last1@example.invalid'`)
     expect(e).toMatchObject({ full_name: 'First1 Last1', first_name: 'First1', last_name: 'Last1', department: 'Engineering', job_title: 'Engineer', hr_status: 'Active', manager: 'Pat Manager', employment_status: 'active' })
@@ -115,14 +115,14 @@ describe.skipIf(isStaging)('Excel import', () => {
 
   it('2: thousands of employees in one import', tx(async () => {
     await actAs(db, EDITOR)
-    const r = await importRows(Array.from({ length: 2500 }, (_, i) => ({ row: i + 1, action: 'create', fields: person(i) })))
+    const r = await importRows(Array.from({ length: 2500 }, (_, i) => ({ row: i + 1, action: 'create', fields: person(i), status: 'active' })))
     expect(r.created).toBe(2500)
     expect(await n(`select count(*) as n from employees where employment_status = 'active'`)).toBe(2500)
   }), 120_000)
 
   it('3: re-uploading the same file never creates anyone twice (email is the key, case and spaces ignored)', tx(async () => {
     await actAs(db, EDITOR)
-    await importRows([1, 2].map((i) => ({ row: i, action: 'create', fields: person(i) })))
+    await importRows([1, 2].map((i) => ({ row: i, action: 'create', fields: person(i), status: 'active' })))
     const before = await n(`select count(*) as n from employees`)
     // A stale preview sending "create" again, with the email typed differently:
     const again = await importRows([1, 2].map((i) => ({ row: i, action: 'create', fields: person(i, { email: ` FIRST${i}.Last${i}@Example.INVALID ` }) })))
@@ -138,13 +138,21 @@ describe.skipIf(isStaging)('Excel import', () => {
 
   it('4: updating details applies only non-blank, different values and records old → new', tx(async () => {
     await actAs(db, EDITOR)
-    await importRows([{ row: 1, action: 'create', fields: person(1) }])
+    await importRows([{ row: 1, action: 'create', fields: person(1), status: 'active' }])
     const id = (await one<{ id: string }>(`select id from employees where email_key = 'first1.last1@example.invalid'`)).id
     const r = await importRows([{ row: 1, action: 'update', employee_id: id, fields: { ...person(1), department: 'Finance', manager: '', job_title: '   ', start_date: '' } }], 'v2.xlsx')
     expect(r).toMatchObject({ updated: 1, unchanged: 0 })
     expect(await emp(id)).toMatchObject({ department: 'Finance', manager: 'Pat Manager', job_title: 'Engineer', employment_status: 'active' })
     const h = (await history(id)).find((x) => x.kind === 'details')!
     expect(h).toMatchObject({ source: 'import', changes: { department: ['Engineering', 'Finance'] } })
+  }))
+
+  it('a row without a status (unrecognised Employee Status) is added as Not in directory — never guessed', tx(async () => {
+    await actAs(db, EDITOR)
+    await importRows([{ row: 1, action: 'create', fields: person(1, { hr_status: 'Leave of Absence' }) }])
+    const e = await one(`select * from employees where email_key = 'first1.last1@example.invalid'`)
+    expect(e).toMatchObject({ employment_status: null, hr_status: 'Leave of Absence', status_changed_at: null })
+    expect(await history(e.id)).toEqual([expect.objectContaining({ kind: 'created', to_status: null, source: 'import' })])
   }))
 
   it('5: missing names and invalid emails are reported; nothing is created for them', tx(async () => {
@@ -168,7 +176,7 @@ describe.skipIf(isStaging)('Excel import', () => {
 
   it('a work email already used by another employee cannot be set on someone else', tx(async () => {
     await actAs(db, EDITOR)
-    await importRows([1, 2].map((i) => ({ row: i, action: 'create', fields: person(i) })))
+    await importRows([1, 2].map((i) => ({ row: i, action: 'create', fields: person(i), status: 'active' })))
     const second = (await one<{ id: string }>(`select id from employees where email_key = 'first2.last2@example.invalid'`)).id
     const r = await importRows([{ row: 1, action: 'update', employee_id: second, fields: { email: 'First1.Last1@example.invalid' } }])
     expect(r.conflicts[0].reason).toMatch(/belongs to a different employee/)
@@ -177,7 +185,7 @@ describe.skipIf(isStaging)('Excel import', () => {
 
   it('status changes from a file only when approved per row; employees missing from a file are untouched', tx(async () => {
     await actAs(db, EDITOR)
-    await importRows([1, 2].map((i) => ({ row: i, action: 'create', fields: person(i) })))
+    await importRows([1, 2].map((i) => ({ row: i, action: 'create', fields: person(i), status: 'active' })))
     const [a, b] = (await db.query<{ id: string }>(`select id from employees where email_key like 'first%' order by email_key`)).rows.map((r) => r.id)
     // Row says "Terminated" but the change wasn't approved: details only.
     await importRows([{ row: 1, action: 'update', employee_id: a, fields: { hr_status: 'Terminated' } }])
@@ -299,7 +307,7 @@ describe.skipIf(isStaging)('14: backup and restore', () => {
 
   it('directory fields, statuses and history round-trip exactly; nothing is re-triggered', tx(async () => {
     await actAs(db, EDITOR)
-    await importRows([1, 2].map((i) => ({ row: i, action: 'create', fields: person(i) })))
+    await importRows([1, 2].map((i) => ({ row: i, action: 'create', fields: person(i), status: 'active' })))
     await completeOnboarding(fx.danaOnboarding)
     const off = await newChecklist('offboarding_checklists', fx.dana, 'Dana Field')
     await completeOffboarding(off)
@@ -356,7 +364,7 @@ describe.skipIf(isStaging)('028 rollback', () => {
   it('028_down restores 027 exactly, keeps every pre-028 row, saves what 028 recorded, and 028 re-applies', async () => {
     await inCommittedTx(db, async () => {
       await actAs(db, EDITOR)
-      await importRows([{ row: 1, action: 'create', fields: person(1) }])
+      await importRows([{ row: 1, action: 'create', fields: person(1), status: 'active' }])
       await actAsDatabase(db)
     })
     const imported = await n(`select count(*) as n from employees where email_key = 'first1.last1@example.invalid'`)

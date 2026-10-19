@@ -116,12 +116,3 @@ export function paginate<T>(rows: T[], page: number, size: number) {
 export function distinctValues(rows: DirectoryEmployee[], pick: (e: DirectoryEmployee) => string | null) {
   return [...new Set(rows.map(pick).filter((v): v is string => !!v && !!v.trim()))].sort((a, b) => a.localeCompare(b))
 }
-
-/**
- * Whether an imported "Employee Status" value means the person no longer
- * works here. Anything else (Active, Leave of Absence, blank, …) counts as
- * employed. The text itself is always kept as imported.
- */
-export function statusFromHr(hr: string | null | undefined): EmploymentStatus {
-  return /^(inactive|terminated|offboarded|former|separated|resigned|retired|deceased|left)\b/i.test((hr ?? '').trim()) ? 'inactive' : 'active'
-}

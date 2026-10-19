@@ -326,8 +326,9 @@ $$;
 --   {"row": n, "action": "create" | "update", "employee_id": uuid (update),
 --    "fields": {first_name, last_name, department, job_title, hr_status,
 --               manager, start_date, email},
---    "status": "active" | "inactive" (create: initial status; update:
---               only when the user approved that status change)}
+--    "status": "active" | "inactive" (create: initial status — omitted =
+--               Not in directory; update: only when the user approved
+--               that status change)}
 -- Blank values never clear anything. A row whose email belongs to a
 -- different employee is reported, not applied — so the same file can be
 -- re-imported without creating anyone twice. One transaction.
@@ -382,8 +383,10 @@ begin
       end if;
       insert into employees (full_name, created_by) values (v_first || ' ' || v_last, auth.uid()) returning id into v_id;
       perform apply_employee_fields(v_id, v_fields, false);
-      v_status := coalesce(v_status, 'active');
-      update employees set employment_status = v_status, status_changed_at = now(), updated_at = now() where id = v_id;
+      -- No status given (e.g. an unrecognised Employee Status): added as
+      -- "Not in directory" — employment status is never guessed.
+      update employees set employment_status = v_status, status_changed_at = case when v_status is null then null else now() end,
+             updated_at = now() where id = v_id;
       insert into employee_history (employee_id, kind, to_status, source, import_filename, actor_user_id)
       values (v_id, 'created', v_status, 'import', p_filename, auth.uid());
       v_created := v_created + 1;

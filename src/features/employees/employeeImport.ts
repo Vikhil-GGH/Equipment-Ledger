@@ -1,5 +1,6 @@
 import type { EmploymentStatus } from '../../types/database.types'
-import { EMPLOYMENT_LABELS, statusFromHr, type DirectoryEmployee } from './directoryModel'
+import { EMPLOYMENT_LABELS, type DirectoryEmployee } from './directoryModel'
+import { classifyHrStatus, type HrClassification } from './employeeStatusMapping'
 
 /**
  * Active Employees Excel import: reads the sheet, validates it, and
@@ -10,6 +11,9 @@ import { EMPLOYMENT_LABELS, statusFromHr, type DirectoryEmployee } from './direc
  *    clear anything);
  *  - no email match but the same normalized name -> "possible duplicate":
  *    skipped unless the user links it to an employee or creates a new one;
+ *  - "Employee Status" is read with the explicit list in
+ *    employeeStatusMapping.ts; an unrecognised value is flagged for review
+ *    and never turned into a status;
  *  - a status change from the file (incl. re-activating an offboarded
  *    employee) is applied only when ticked;
  *  - employees not in the file are never touched.
@@ -73,8 +77,10 @@ export interface PreviewRow {
   candidates: DirectoryEmployee[]
   /** Non-blank values that differ from the matched employee: [field, current, new]. */
   changes: [EmployeeField, string, string][]
-  /** Employment status implied by the file's "Employee Status". */
-  fileStatus: EmploymentStatus
+  /** Employment status the file's "Employee Status" maps to, or 'review' if not recognised. */
+  fileStatus: HrClassification
+  /** New rows with an unrecognised status: what to add them as (null = Not in directory). */
+  chosenStatus: EmploymentStatus | null
   /** Status change the user may approve (current -> file). */
   statusChange?: { from: EmploymentStatus | null; to: EmploymentStatus; reactivation: boolean }
   // ---- the user's choices (defaults set by buildPreview)
@@ -112,8 +118,8 @@ export function buildPreview(sheetRows: Record<string, unknown>[], headers: stri
     if (key && seenEmails.has(key)) errors.push(`Same work email as row ${seenEmails.get(key)}`)
     if (key && !seenEmails.has(key)) seenEmails.set(key, i + 2)
 
-    const fileStatus = statusFromHr(fields.hr_status)
-    const row: PreviewRow = { row: i + 2, fields, errors, kind: 'invalid', candidates: [], changes: [], fileStatus, decision: 'skip', applyStatus: false }
+    const fileStatus = classifyHrStatus(fields.hr_status)
+    const row: PreviewRow = { row: i + 2, fields, errors, kind: 'invalid', candidates: [], changes: [], fileStatus, chosenStatus: null, decision: 'skip', applyStatus: false }
     if (errors.length) return void out.push(row)
 
     const match = key ? byEmail.get(key) : undefined
@@ -146,7 +152,9 @@ export function describeUpdate(row: PreviewRow, e: DirectoryEmployee) {
     return same ? [] : [[c.key, cur, next]]
   })
   const current = e.employment_status
-  row.statusChange = current === row.fileStatus ? undefined : { from: current, to: row.fileStatus, reactivation: current === 'inactive' && row.fileStatus === 'active' }
+  const to = row.fileStatus
+  // An unrecognised Employee Status never proposes a status change.
+  row.statusChange = to === 'review' || current === to ? undefined : { from: current, to, reactivation: current === 'inactive' && to === 'active' }
   // Adding someone to the directory (no status yet) is what the file is for;
   // anything else — deactivating or re-activating — must be ticked.
   row.applyStatus = !!row.statusChange && current === null
@@ -182,7 +190,11 @@ export interface CommitRow {
 export function commitPayload(rows: PreviewRow[]): CommitRow[] {
   return rows.flatMap((r): CommitRow[] => {
     if (r.errors.length || r.decision === 'skip') return []
-    if (r.decision === 'create') return [{ row: r.row, action: 'create', fields: r.fields, status: r.fileStatus }]
+    if (r.decision === 'create') {
+      const status = r.fileStatus === 'review' ? r.chosenStatus : r.fileStatus
+      // No status = added as "Not in directory".
+      return [{ row: r.row, action: 'create', fields: r.fields, ...(status ? { status } : {}) }]
+    }
     const id = r.linkTo ?? r.match?.id
     if (!id) return []
     // Only what differs is sent: untouched values can't be rewritten.
@@ -192,13 +204,17 @@ export function commitPayload(rows: PreviewRow[]): CommitRow[] {
 }
 
 export function previewCounts(rows: PreviewRow[]) {
-  const c = { total: rows.length, new: 0, update: 0, unchanged: 0, possible_duplicate: 0, invalid: 0, statusChanges: 0, toApply: commitPayload(rows).length }
+  const c = { total: rows.length, new: 0, update: 0, unchanged: 0, possible_duplicate: 0, invalid: 0, statusChanges: 0, statusReview: 0, toApply: commitPayload(rows).length }
   for (const r of rows) {
     c[r.kind]++
     if (r.statusChange) c.statusChanges++
+    if (needsStatusReview(r)) c.statusReview++
   }
   return c
 }
 
 export const statusChangeLabel = (s: NonNullable<PreviewRow['statusChange']>) =>
   `${s.from ? EMPLOYMENT_LABELS[s.from] : 'Not in directory'} → ${EMPLOYMENT_LABELS[s.to]}${s.reactivation ? ' (re-activation)' : ''}`
+
+/** A valid row whose Employee Status isn't in the mapping. */
+export const needsStatusReview = (r: PreviewRow) => r.errors.length === 0 && r.fileStatus === 'review'

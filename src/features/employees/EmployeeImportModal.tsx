@@ -8,11 +8,14 @@ import {
   buildPreview,
   commitPayload,
   linkRow,
+  needsStatusReview,
   previewCounts,
   statusChangeLabel,
   type Decision,
   type PreviewRow,
 } from './employeeImport'
+import { mappingSummary } from './employeeStatusMapping'
+import type { EmploymentStatus } from '../../types/database.types'
 
 const KIND_LABEL: Record<PreviewRow['kind'], string> = {
   new: 'New',
@@ -43,7 +46,8 @@ export function EmployeeImportModal({ directory, onClose }: { directory: Directo
   const [tab, setTab] = useState<Tab>('review')
   const [result, setResult] = useState<EmployeeImportResult | null>(null)
   const counts = useMemo(() => (rows ? previewCounts(rows) : null), [rows])
-  const needsReview = (r: PreviewRow) => r.kind === 'possible_duplicate' || r.kind === 'invalid' || !!r.statusChange
+  const needsReview = (r: PreviewRow) => r.kind === 'possible_duplicate' || r.kind === 'invalid' || !!r.statusChange || needsStatusReview(r)
+  const mapping = mappingSummary()
   const visible = (rows ?? []).filter((r) => tab === 'all' || needsReview(r))
 
   async function read(file: File) {
@@ -120,6 +124,10 @@ export function EmployeeImportModal({ directory, onClose }: { directory: Directo
           An .xlsx file with the columns: {EMPLOYEE_COLUMNS.map((c) => c.header).join(', ')}. Work email is used to recognise existing employees.
           Blank cells never clear anything, nobody is removed for being missing from the file, and status changes apply only where you tick them.
         </p>
+        <p className="text-xs text-neutral-500" data-testid="status-mapping">
+          Employee Status counted as Active: {mapping.active.join(', ')}. As Inactive: {mapping.inactive.join(', ')}. Any other value (or a blank) is
+          kept as written and flagged for review — it never sets employment status by itself.
+        </p>
         <input type="file" accept=".xlsx,.xls" aria-label="Employee Excel file" onChange={(e) => e.target.files?.[0] && void read(e.target.files[0])} className="text-sm" />
         {error && (
           <p role="alert" className="text-sm text-red-600 dark:text-red-400">
@@ -137,6 +145,7 @@ export function EmployeeImportModal({ directory, onClose }: { directory: Directo
               <span className="text-amber-700 dark:text-amber-400">{counts.possible_duplicate} possible duplicates</span>
               <span className="text-red-700 dark:text-red-400">{counts.invalid} invalid</span>
               <span>{counts.statusChanges} status changes</span>
+              <span className="text-amber-700 dark:text-amber-400">{counts.statusReview} status to review</span>
             </div>
             <div className="flex gap-2 text-sm">
               <button type="button" className={tab === 'review' ? 'btn-primary px-2 py-1' : 'btn-secondary px-2 py-1'} onClick={() => setTab('review')}>
@@ -183,6 +192,28 @@ export function EmployeeImportModal({ directory, onClose }: { directory: Directo
                               {EMPLOYEE_COLUMNS.find((c) => c.key === k)!.header}: <span className="text-neutral-500 line-through">{a || '—'}</span> → {b}
                             </span>
                           ))}
+                          {needsStatusReview(r) && (
+                            <span className="mt-1 block font-medium text-amber-800 dark:text-amber-300">
+                              Employee Status “{r.fields.hr_status || 'blank'}” not recognised —{' '}
+                              {r.decision === 'create' ? (
+                                <label className="inline-flex items-center gap-1">
+                                  add as
+                                  <select
+                                    aria-label={`Employment status for row ${r.row}`}
+                                    className="input inline-block w-auto py-0.5 text-xs"
+                                    value={r.chosenStatus ?? ''}
+                                    onChange={(e) => change(index, (x) => (x.chosenStatus = (e.target.value || null) as EmploymentStatus | null))}
+                                  >
+                                    <option value="">Not in directory</option>
+                                    <option value="active">Active</option>
+                                    <option value="inactive">Inactive / Offboarded</option>
+                                  </select>
+                                </label>
+                              ) : (
+                                'employment status left unchanged'
+                              )}
+                            </span>
+                          )}
                           {r.statusChange && (
                             <label className="mt-1 flex items-center gap-1 font-medium">
                               <input
