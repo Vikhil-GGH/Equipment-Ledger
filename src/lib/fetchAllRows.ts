@@ -21,13 +21,17 @@ interface PageResult {
 }
 
 /** The few query-builder calls used here, so tests can supply a fake. */
+export interface PagedQuery {
+  order(column: string, options: { ascending: boolean }): {
+    range(from: number, to: number): PromiseLike<PageResult>
+  }
+  /** Only needed when a `filter` option uses it. */
+  ilike?(column: string, pattern: string): PagedQuery
+}
+
 export interface PagedSource {
   from(table: string): {
-    select(columns: string, options: { count: 'exact' }): {
-      order(column: string, options: { ascending: boolean }): {
-        range(from: number, to: number): PromiseLike<PageResult>
-      }
-    }
+    select(columns: string, options: { count: 'exact' }): PagedQuery
   }
 }
 
@@ -41,14 +45,22 @@ export class IncompleteReadError extends Error {
 export async function fetchAllRows<T extends { id: string }>(
   client: PagedSource,
   table: string,
-  { columns = '*', pageSize = PAGE_SIZE }: { columns?: string; pageSize?: number } = {},
+  {
+    columns = '*',
+    pageSize = PAGE_SIZE,
+    filter,
+  }: {
+    columns?: string
+    pageSize?: number
+    /** Narrows every page the same way (e.g. the list's search), so the count is of matching rows. */
+    filter?: (q: PagedQuery) => PagedQuery
+  } = {},
 ): Promise<{ rows: T[]; count: number }> {
   const rows: T[] = []
   let expected: number | null = null
   for (;;) {
-    const { data, error, count } = await client
-      .from(table)
-      .select(columns, { count: 'exact' })
+    const query = client.from(table).select(columns, { count: 'exact' })
+    const { data, error, count } = await (filter ? filter(query) : query)
       .order('id', { ascending: true })
       .range(rows.length, rows.length + pageSize - 1)
     if (error) throw Object.assign(new IncompleteReadError(table, error.message), { code: error.code })

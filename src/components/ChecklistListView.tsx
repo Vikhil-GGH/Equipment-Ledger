@@ -54,6 +54,7 @@ export function ChecklistListView<T extends ChecklistRecord>({
   startAction,
   progressLabel,
   emptyMessage,
+  exportAction,
 }: {
   title: string
   records: T[] | undefined
@@ -70,6 +71,8 @@ export function ChecklistListView<T extends ChecklistRecord>({
   /** e.g. "onboarding progress" — used for the progress bar's accessible name. */
   progressLabel: string
   emptyMessage: string
+  /** Optional download button; gets the current filter and sort so it exports exactly this list. */
+  exportAction?: (view: { search: string; statusFilter: StatusFilter; sort: typeof DEFAULT_CHECKLIST_SORT }) => ReactNode
 }) {
   const navigate = useNavigate()
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
@@ -135,6 +138,7 @@ export function ChecklistListView<T extends ChecklistRecord>({
               </option>
             ))}
           </select>
+          {exportAction?.({ search, statusFilter, sort })}
           {startAction}
         </div>
       </div>

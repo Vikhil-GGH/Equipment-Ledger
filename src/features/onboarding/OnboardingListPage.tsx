@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChecklistListView } from '../../components/ChecklistListView'
+import { DownloadExcelButton } from '../checklistExport/DownloadExcelButton'
 import { Modal } from '../../components/Modal'
 import { getErrorMessage } from '../../lib/errors'
 import { useAuth } from '../auth/useAuth'
@@ -30,6 +31,7 @@ export function OnboardingListPage() {
         detailPath={(id) => `/onboarding/${id}`}
         progressLabel="onboarding progress"
         emptyMessage="No onboarding records yet."
+        exportAction={(view) => <DownloadExcelButton kind="Onboarding" view={view} />}
         startAction={
           canStart && (
             <button className="btn-primary whitespace-nowrap" onClick={() => setShowStart(true)}>

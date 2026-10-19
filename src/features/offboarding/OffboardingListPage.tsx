@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChecklistListView } from '../../components/ChecklistListView'
+import { DownloadExcelButton } from '../checklistExport/DownloadExcelButton'
 import { Modal } from '../../components/Modal'
 import { getErrorMessage } from '../../lib/errors'
 import { useAuth } from '../auth/useAuth'
@@ -34,6 +35,7 @@ export function OffboardingListPage() {
         detailPath={(id) => `/offboarding/${id}`}
         progressLabel="offboarding progress"
         emptyMessage="No offboarding records yet."
+        exportAction={(view) => <DownloadExcelButton kind="Offboarding" view={view} />}
         startAction={
           canStart && (
             <button className="btn-primary whitespace-nowrap" onClick={() => setShowStart(true)}>
