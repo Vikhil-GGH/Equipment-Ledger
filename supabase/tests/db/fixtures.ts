@@ -32,7 +32,7 @@ export const LEDGER_TABLES = [
  */
 export async function backupTables(db: Db): Promise<string[]> {
   const { rows } = await db.query<{ t: string }>(
-    `select t from unnest(array['employees', 'equipment_issues', 'employee_history']) t where to_regclass('public.' || t) is not null`,
+    `select t from unnest(array['employees', 'equipment_issues', 'employee_history', 'bulk_import_receipts']) t where to_regclass('public.' || t) is not null`,
   )
   return [...LEDGER_TABLES, ...rows.map((r) => r.t)]
 }
@@ -127,7 +127,8 @@ export async function seedLedger(db: Db, tag: string): Promise<LedgerIds> {
   await rpc(db, `perform_lifecycle_action('active_laptops_np', $1, 'provide', 'Test Employee A')`, [npLaptop])
   const monitor = await create('monitors', 'Dell 24 Monitor', 'Monitor', `${tag}-MON-1`)
   const other = await create('other_equipment', 'USB-C Dock', 'Dock', `${tag}-OTH-1`)
-  const bulkItem = await rpc<string>(db, `create_bulk_item('Wireless Mouse', 'Accessory', null, 20)`)
+  // Tagged: one bulk item per name + category (20260901000029).
+  const bulkItem = await rpc<string>(db, `create_bulk_item($1, 'Accessory', null, 20)`, [`${tag} Wireless Mouse`])
 
   const onboarding = (
     await db.query<{ id: string }>(

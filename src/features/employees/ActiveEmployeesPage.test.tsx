@@ -109,6 +109,19 @@ describe('Active Employees page', () => {
     expect(setStatus.mutateAsync).toHaveBeenCalledWith({ id: directory[31].id, status: 'active', note: 'Rehire reactivated' })
   })
 
+  it('employment decisions: listed, and resolved only through an explicit, confirmed choice', async () => {
+    const user = userEvent.setup()
+    directory.push(emp({ first_name: 'Lia', last_name: 'Leave', employment_status: null, hr_status: 'Leave of Absence', status_decision_required: true }))
+    render(<ActiveEmployeesPage />)
+    const box = screen.getByRole('region', { name: 'Employment status decisions' })
+    expect(box).toHaveTextContent('Lia Leave — Employee Status “Leave of Absence”')
+    await user.click(within(box).getByRole('button', { name: 'Make Active' }))
+    expect(setStatus.mutateAsync).not.toHaveBeenCalled() // a second, deliberate step is required
+    expect(box).toHaveTextContent('Make Lia Leave Active?')
+    await user.click(within(box).getByRole('button', { name: 'Confirm' }))
+    expect(setStatus.mutateAsync).toHaveBeenCalledWith({ id: directory.at(-1)!.id, status: 'active', note: 'Decision: Employee Status "Leave of Absence" reviewed' })
+  })
+
   it('viewers can browse and download, but not upload, add, edit or reactivate', () => {
     vi.mocked(useAuth).mockReturnValue({ role: 'viewer' } as never)
     render(<ActiveEmployeesPage />)

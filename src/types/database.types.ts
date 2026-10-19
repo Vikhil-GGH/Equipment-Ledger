@@ -676,6 +676,7 @@ export interface Database {
           start_date?: string | null
           employment_status?: EmploymentStatus | null
           reactivation_pending?: boolean
+          status_decision_required?: boolean
           status_changed_at?: string | null
           updated_at?: string | null
           email_key?: string | null
@@ -689,7 +690,7 @@ export interface Database {
         Row: {
           id: string
           employee_id: string
-          kind: 'created' | 'status' | 'details' | 'reactivation_pending'
+          kind: 'created' | 'status' | 'details' | 'reactivation_pending' | 'decision_required'
           from_status: EmploymentStatus | null
           to_status: EmploymentStatus | null
           changes: Json | null
@@ -881,6 +882,7 @@ export interface Database {
       commit_bulk_import: {
         Args: {
           [key: string]: unknown
+          p_confirm_repeat?: boolean
           p_filename: string
           p_rows: Json
         }

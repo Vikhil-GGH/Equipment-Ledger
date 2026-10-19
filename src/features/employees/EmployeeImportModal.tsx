@@ -180,6 +180,12 @@ export function EmployeeImportModal({ directory, onClose }: { directory: Directo
                         <td className="px-2 py-1.5">{r.fields.email}</td>
                         <td className="px-2 py-1.5">
                           <span className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 font-medium ring-1 ring-inset ${KIND_TONE[r.kind]}`}>{KIND_LABEL[r.kind]}</span>
+                          {r.kind === 'possible_duplicate' &&
+                            r.candidates.map((c) => (
+                              <span key={c.id} className="mt-0.5 block text-amber-800 dark:text-amber-300">
+                                {c.full_name}: {r.candidateReasons[c.id]}
+                              </span>
+                            ))}
                           {r.errors.map((e) => (
                             <span key={e} className="mt-0.5 block text-red-700 dark:text-red-400">
                               {e}
@@ -254,7 +260,7 @@ export function EmployeeImportModal({ directory, onClose }: { directory: Directo
                               {r.candidates.map((c) => (
                                 <option key={c.id} value={`link:${c.id}`}>
                                   Same person as {c.full_name}
-                                  {c.email ? ` (${c.email})` : ''}
+                                  {c.email ? ` (${c.email})` : ''} — {r.candidateReasons[c.id]}
                                 </option>
                               ))}
                               <option value="create">A different person — add new</option>

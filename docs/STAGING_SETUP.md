@@ -424,6 +424,10 @@ Applied to staging on 2026-10-16 after a verified snapshot (`staging-pre-027`, a
 
 Prepared locally; **not applied to hosted staging** until approved. It adds the Active Employees directory on the existing `employees` records (HR fields, work email unique once normalized, employment status, `employee_history` audit trail), the onboarding/offboarding completion triggers, and the import/edit functions. Existing employees are not put in the directory (their status stays empty). Rollback: `supabase/rollback/20260901000028_down.sql` (run before `20260901000027_down.sql`; it saves the new fields and history to `private.*_backup_028` first). After applying: `npm run staging:test-db` (includes `directory-live`, rolled back) and `npm run staging:verify`.
 
+## Migration 029 on staging (activation safeguards, Bulk Stock H4) — not applied yet
+
+Prepared locally; **not applied to hosted staging** until approved. Onboarding completion only activates an employee whose imported Employee Status is recognised as Active (or who has no imported status — a genuine new hire); anything else is flagged "Employment status needs a decision" on Active Employees. Bulk Stock imports become deliveries recorded by content, so the same file again adds nothing unless confirmed as a new delivery; one bulk item per name + category is enforced. Rollback: `supabase/rollback/20260901000029_down.sql` (run before `20260901000028_down.sql`). After applying: `npm run staging:test-db` (includes `safeguards-live`: the onboarding safeguard and the two-connection import lock, rolled back) and `npm run staging:verify`.
+
 ## Production deployment checklist (for later — needs explicit approval at each step)
 
 Do **not** start this until the staging results have been reviewed and approved.

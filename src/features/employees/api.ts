@@ -36,7 +36,7 @@ export function useEmployeeDirectory(enabled = true) {
 
 export interface HistoryEntry {
   id: string
-  kind: 'created' | 'status' | 'details' | 'reactivation_pending'
+  kind: 'created' | 'status' | 'details' | 'reactivation_pending' | 'decision_required'
   from_status: EmploymentStatus | null
   to_status: EmploymentStatus | null
   changes: Record<string, [string | null, string | null]> | null

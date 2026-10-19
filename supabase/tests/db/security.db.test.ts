@@ -438,7 +438,7 @@ describe('4. legitimate workflows still work', () => {
       const bulk = await rpc<{ updated: number }>(
         db,
         `commit_bulk_import('bulk.xlsx', $1::jsonb)`,
-        [JSON.stringify([{ name: 'Wireless Mouse', category: 'Accessory', location: '', quantity: 5 }])],
+        [JSON.stringify([{ name: 'ZZ-SECTEST Wireless Mouse', category: 'Accessory', location: '', quantity: 5 }])],
       )
       expect(bulk.updated).toBe(1)
       const log = await db.query(`select filename from import_events where filename in ('monitors.xlsx', 'bulk.xlsx')`)

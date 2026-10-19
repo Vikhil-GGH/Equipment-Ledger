@@ -63,6 +63,8 @@ export function ActiveEmployeesPage() {
   const all = directory.data
   const activeCount = useMemo(() => (all ?? []).filter((e) => e.employment_status === 'active').length, [all])
   const rehires = useMemo(() => (all ?? []).filter((e) => e.reactivation_pending), [all])
+  const decisions = useMemo(() => (all ?? []).filter((e) => e.status_decision_required && !e.reactivation_pending), [all])
+  const [deciding, setDeciding] = useState<{ id: string; status: 'active' | 'inactive' } | null>(null)
   const departments = useMemo(() => distinctValues(all ?? [], (e) => e.department), [all])
   const hrStatuses = useMemo(() => distinctValues(all ?? [], (e) => e.hr_status), [all])
   const matching = useMemo(() => (all ? filterEmployees(all, view) : []), [all, view])
@@ -99,6 +101,17 @@ export function ActiveEmployeesPage() {
       setMessage({ kind: 'status', text: `${e.full_name} is Active again.` })
     } catch (err) {
       setMessage({ kind: 'error', text: getErrorMessage(err, 'Could not reactivate') })
+    }
+  }
+
+  async function decide(e: DirectoryEmployee, status: 'active' | 'inactive') {
+    setMessage(null)
+    try {
+      await setStatus.mutateAsync({ id: e.id, status, note: `Decision: Employee Status "${e.hr_status ?? ''}" reviewed` })
+      setDeciding(null)
+      setMessage({ kind: 'status', text: `${e.full_name} is now ${status === 'active' ? 'Active' : 'Inactive / Offboarded'}.` })
+    } catch (err) {
+      setMessage({ kind: 'error', text: getErrorMessage(err, 'Could not change the status') })
     }
   }
 
@@ -192,6 +205,45 @@ export function ActiveEmployeesPage() {
             ))}
           </ul>
         </div>
+      )}
+
+      {decisions.length > 0 && (
+        <section aria-label="Employment status decisions" className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-sm dark:border-amber-900/50 dark:bg-amber-950/30">
+          <p className="font-medium text-amber-900 dark:text-amber-200">Employment status needs a decision</p>
+          <p className="text-xs text-amber-800/80 dark:text-amber-300/80">
+            Their Employee Status doesn&apos;t say Active, so onboarding didn&apos;t activate them. Nothing happens until you decide; equipment is never affected.
+          </p>
+          <ul className="mt-2 space-y-1">
+            {decisions.map((e) => (
+              <li key={e.id} className="flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  {e.full_name} <span className="text-xs text-neutral-500">— Employee Status “{e.hr_status || 'blank'}”</span>
+                </span>
+                {canEdit &&
+                  (deciding?.id === e.id ? (
+                    <span className="flex items-center gap-2">
+                      <span className="text-xs font-medium">Make {e.full_name} {deciding.status === 'active' ? 'Active' : 'Inactive / Offboarded'}?</span>
+                      <button type="button" className="btn-primary px-2 py-1 text-xs" onClick={() => void decide(e, deciding.status)} disabled={setStatus.isPending}>
+                        Confirm
+                      </button>
+                      <button type="button" className="btn-secondary px-2 py-1 text-xs" onClick={() => setDeciding(null)}>
+                        Cancel
+                      </button>
+                    </span>
+                  ) : (
+                    <span className="flex gap-2">
+                      <button type="button" className="btn-secondary px-2 py-1 text-xs" onClick={() => setDeciding({ id: e.id, status: 'active' })}>
+                        Make Active
+                      </button>
+                      <button type="button" className="btn-secondary px-2 py-1 text-xs" onClick={() => setDeciding({ id: e.id, status: 'inactive' })}>
+                        Mark Inactive
+                      </button>
+                    </span>
+                  ))}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {(available.isLoading || directory.isLoading) && <p className="text-sm text-neutral-500">Loading…</p>}

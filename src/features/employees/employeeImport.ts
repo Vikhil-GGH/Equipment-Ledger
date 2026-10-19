@@ -9,8 +9,11 @@ import { classifyHrStatus, type HrClassification } from './employeeStatusMapping
  *  - work email (trimmed, lower-cased) is the matching key: same email ->
  *    the existing employee (update only what differs; blank cells never
  *    clear anything);
- *  - no email match but the same normalized name -> "possible duplicate":
- *    skipped unless the user links it to an employee or creates a new one;
+ *  - no email match but a plausible one -> "possible duplicate", skipped
+ *    unless the user links it to an employee or creates a new one. Plausible:
+ *    the same normalised name; an employee recorded under a single word
+ *    (e.g. "Sadvi") that equals the row's first or last name; or the same
+ *    email user name at another domain. Never merged automatically;
  *  - "Employee Status" is read with the explicit list in
  *    employeeStatusMapping.ts; an unrecognised value is flagged for review
  *    and never turned into a status;
@@ -73,8 +76,10 @@ export interface PreviewRow {
   kind: RowKind
   /** The employee this row matched by work email. */
   match?: DirectoryEmployee
-  /** Same-name employees when there was no email match. */
+  /** Plausible matches when there was no email match (never merged automatically). */
   candidates: DirectoryEmployee[]
+  /** Why each candidate was suggested, by employee id. */
+  candidateReasons: Record<string, string>
   /** Non-blank values that differ from the matched employee: [field, current, new]. */
   changes: [EmployeeField, string, string][]
   /** Employment status the file's "Employee Status" maps to, or 'review' if not recognised. */
@@ -96,11 +101,16 @@ export function buildPreview(sheetRows: Record<string, unknown>[], headers: stri
   const byEmail = new Map<string, DirectoryEmployee>()
   for (const e of directory) if (e.email_key) byEmail.set(e.email_key, e)
   const byName = new Map<string, DirectoryEmployee[]>()
+  // Employees recorded under one word only (e.g. "Sadvi"), by that word.
+  const bySingleWord = new Map<string, DirectoryEmployee[]>()
+  // Email user name ("ana.ruiz" of ana.ruiz@old.example) -> employees.
+  const byEmailUser = new Map<string, DirectoryEmployee[]>()
+  const add = (m: Map<string, DirectoryEmployee[]>, k: string, e: DirectoryEmployee) => m.set(k, [...(m.get(k) ?? []), e])
   for (const e of directory) {
-    for (const k of new Set([e.name_key, e.first_name || e.last_name ? nameKey(`${e.first_name ?? ''} ${e.last_name ?? ''}`) : null])) {
-      if (!k) continue
-      byName.set(k, [...(byName.get(k) ?? []), e])
-    }
+    const keys = new Set([e.name_key, e.first_name || e.last_name ? nameKey(`${e.first_name ?? ''} ${e.last_name ?? ''}`) : null])
+    for (const k of keys) if (k) add(byName, k, e)
+    for (const k of keys) if (k && !k.includes(' ')) add(bySingleWord, k, e)
+    if (e.email_key?.includes('@')) add(byEmailUser, e.email_key.split('@')[0], e)
   }
   const seenEmails = new Map<string, number>()
   const out: PreviewRow[] = []
@@ -119,17 +129,29 @@ export function buildPreview(sheetRows: Record<string, unknown>[], headers: stri
     if (key && !seenEmails.has(key)) seenEmails.set(key, i + 2)
 
     const fileStatus = classifyHrStatus(fields.hr_status)
-    const row: PreviewRow = { row: i + 2, fields, errors, kind: 'invalid', candidates: [], changes: [], fileStatus, chosenStatus: null, decision: 'skip', applyStatus: false }
+    const row: PreviewRow = { row: i + 2, fields, errors, kind: 'invalid', candidates: [], candidateReasons: {}, changes: [], fileStatus, chosenStatus: null, decision: 'skip', applyStatus: false }
     if (errors.length) return void out.push(row)
 
     const match = key ? byEmail.get(key) : undefined
     if (match) {
       describeUpdate(row, match)
     } else {
-      const candidates = byName.get(nameKey(`${fields.first_name} ${fields.last_name}`)) ?? []
+      const reasons: Record<string, string> = {}
+      const suggest = (list: DirectoryEmployee[] | undefined, reason: string) => {
+        for (const c of list ?? []) if (!reasons[c.id]) reasons[c.id] = reason
+      }
+      suggest(byName.get(nameKey(`${fields.first_name} ${fields.last_name}`)), 'same name')
+      suggest(bySingleWord.get(nameKey(fields.first_name)), `recorded only as “${fields.first_name.trim()}”`)
+      suggest(bySingleWord.get(nameKey(fields.last_name)), `recorded only as “${fields.last_name.trim()}”`)
+      if (key) {
+        const [user, domain] = key.split('@')
+        suggest(byEmailUser.get(user)?.filter((c) => c.email_key?.split('@')[1] !== domain), 'same email user name, different domain')
+      }
+      const candidates = directory.filter((c) => reasons[c.id])
       if (candidates.length) {
         row.kind = 'possible_duplicate'
         row.candidates = candidates
+        row.candidateReasons = reasons
       } else {
         row.kind = 'new'
         row.decision = 'create'

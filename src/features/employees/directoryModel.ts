@@ -16,6 +16,8 @@ export interface DirectoryEmployee {
   start_date: string | null
   employment_status: EmploymentStatus | null
   reactivation_pending: boolean
+  /** An explicit Active/Inactive decision is needed (20260901000029); absent before it. */
+  status_decision_required?: boolean
   status_changed_at: string | null
   updated_at: string | null
   created_at: string

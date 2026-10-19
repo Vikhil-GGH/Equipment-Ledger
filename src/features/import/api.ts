@@ -69,7 +69,9 @@ export function useExistingBulkItemKeys(enabled = true) {
     queryFn: async () => {
       const { data, error } = await supabase.from('bulk_items').select('name, category')
       if (error) throw error
-      return new Set(data.map((r) => `${r.name.toLowerCase()}|||${r.category.toLowerCase()}`))
+      // Same rule as the database (bulk_item_key): case and spacing ignored.
+      const key = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase()
+      return new Set(data.map((r) => `${key(r.name)}|||${key(r.category)}`))
     },
   })
 }
@@ -103,16 +105,27 @@ export function useCommitAssetImport(collection: AssetCollection) {
   })
 }
 
+/** commit_bulk_import (20260901000029): a delivery; the same content twice is reported, not added. */
+export interface BulkImportResult {
+  created: number
+  updated: number
+  unchanged?: number
+  /** Set when this exact content was already imported — nothing was added. */
+  duplicate_of?: { filename: string; imported_at: string; imported_by: string | null }
+  repeat_of?: string | null
+}
+
 export function useCommitBulkImport() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async ({ filename, rows }: { filename: string; rows: NormalizedBulkImportRow[] }) => {
+    mutationFn: async ({ filename, rows, confirmRepeat = false }: { filename: string; rows: NormalizedBulkImportRow[]; confirmRepeat?: boolean }) => {
       const { data, error } = await supabase.rpc('commit_bulk_import', {
         p_filename: filename,
         p_rows: toJson(rows),
+        ...(confirmRepeat ? { p_confirm_repeat: true } : {}),
       })
       if (error) throw error
-      return data as { created: number; updated: number }
+      return data as unknown as BulkImportResult
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['bulk-items'] })

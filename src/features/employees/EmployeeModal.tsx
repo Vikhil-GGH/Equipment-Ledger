@@ -22,6 +22,8 @@ function describe(h: HistoryEntry) {
       return `${h.from_status ? EMPLOYMENT_LABELS[h.from_status] : 'Not in directory'} → ${h.to_status ? EMPLOYMENT_LABELS[h.to_status] : '—'} (${by})`
     case 'reactivation_pending':
       return 'Completed a new onboarding while offboarded — awaiting reactivation'
+    case 'decision_required':
+      return h.note ?? 'Employment status needs an explicit decision'
     case 'details':
       return `Details changed (${by}): ${Object.entries(h.changes ?? {})
         .map(([k, [a, b]]) => `${EMPLOYEE_COLUMNS.find((c) => c.key === k)?.header ?? k} "${a ?? ''}" → "${b ?? ''}"`)
@@ -103,6 +105,11 @@ export function EmployeeModal({ employee, canEdit, onClose }: { employee: Direct
             <p>
               Employment: <span className="font-semibold">{EMPLOYMENT_LABELS[current ?? 'none']}</span>
               {employee.reactivation_pending && <span className="ml-1 text-amber-700 dark:text-amber-400">· rehire awaiting reactivation</span>}
+              {employee.status_decision_required && (
+                <span className="ml-1 text-amber-700 dark:text-amber-400">
+                  · needs a decision (Employee Status “{employee.hr_status || 'blank'}” doesn&apos;t say Active)
+                </span>
+              )}
             </p>
             <p className="mt-1 text-xs text-neutral-500">
               {openItems === undefined ? '…' : openItems} item{openItems === 1 ? '' : 's'} of equipment still with this employee — changing employment never returns or

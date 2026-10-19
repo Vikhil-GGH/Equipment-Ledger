@@ -179,6 +179,34 @@ describe('Excel import preview', () => {
     ])
   })
 
+  it('2: single-word names and email user names are flagged as possible matches — never merged', () => {
+    const sadvi = { ...emp(), first_name: null, last_name: null, full_name: 'Sadvi', name_key: 'sadvi' }
+    const ruizOld = emp({ first_name: 'Ana', last_name: 'Ruiz', email: 'ana.ruiz@old.invalid' })
+    const unrelated = emp({ first_name: 'Ben', last_name: 'Abel', email: 'ben@x.invalid' })
+    const rows = buildPreview(
+      [
+        excelRow('Sadvi', 'Reddy', 'sadvi.reddy@x.invalid'), // first name = single-word record
+        excelRow('Priya', ' SADVI ', ''), // last name = single-word record
+        excelRow('Anna', 'Ruiz-Lopez', 'Ana.Ruiz@new.invalid'), // same email user name, other domain
+        excelRow('Cara', 'Diaz', 'cara@x.invalid'), // nothing plausible
+        excelRow('Ben', 'Abel', 'ben@x.invalid'), // exact email: the existing employee, not a duplicate
+      ],
+      HEADERS,
+      [sadvi, ruizOld, unrelated],
+    )
+    expect(rows.map((r) => [r.kind, r.candidates.map((c) => c.id), Object.values(r.candidateReasons)])).toEqual([
+      ['possible_duplicate', [sadvi.id], ['recorded only as “Sadvi”']],
+      ['possible_duplicate', [sadvi.id], ['recorded only as “SADVI”']],
+      ['possible_duplicate', [ruizOld.id], ['same email user name, different domain']],
+      ['new', [], []],
+      ['unchanged', [], []],
+    ])
+    // Flagged rows are skipped until a person decides; linking keeps the existing id.
+    expect(commitPayload(rows).map((r) => r.row)).toEqual([5])
+    linkRow(rows[0], sadvi)
+    expect(commitPayload(rows)[0]).toMatchObject({ action: 'update', employee_id: sadvi.id })
+  })
+
   it('status changes: adding to the directory is proposed on; deactivation and re-activation need a tick', () => {
     const notInDir = emp({ email: 'a@x.invalid', employment_status: null })
     const active = emp({ email: 'b@x.invalid' })

@@ -22,6 +22,7 @@ import {
   useExistingSerials,
   type AssetImportIssue,
   type AssetImportResult,
+  type BulkImportResult,
 } from './api'
 
 type ImportTarget = AssetCollection | 'bulk_items'
@@ -82,10 +83,11 @@ export function ImportWizard({ target }: { target: ImportTarget }) {
   const [mapping, setMapping] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<
-    { created: number; updated: number } | AssetImportResult | null
+    BulkImportResult | AssetImportResult | null
   >(null)
   // Spreadsheet row number of each committed row (the server numbers them 1…n).
   const [sheetRowNumbers, setSheetRowNumbers] = useState<number[]>([])
+  const [confirmNewDelivery, setConfirmNewDelivery] = useState(false)
 
   const existingSerials = useExistingSerials(
     (isBulk ? 'serialized_assets' : target) as AssetCollection,
@@ -160,6 +162,8 @@ export function ImportWizard({ target }: { target: ImportTarget }) {
 
   const bulkRows = useMemo<BulkRow[]>(() => {
     if (!isBulk || !sheet || step !== 'preview') return []
+    // The same item twice in one file would be counted twice — flag it.
+    const firstRow = new Map<string, number>()
     return sheet.rows.map((raw, rowIndex) => {
       const mapped: RawBulkImportRow = {
         name: cellToString(raw[mapping.name]),
@@ -168,8 +172,12 @@ export function ImportWizard({ target }: { target: ImportTarget }) {
         quantity: mapping.quantity ? cellToString(raw[mapping.quantity]) : '',
       }
       const errors = validateBulkImportRow(mapped)
-      const key = `${mapped.name.toLowerCase()}|||${mapped.category.toLowerCase()}`
-      const isUpdate = !!existingBulkKeys.data?.has(key)
+      const itemKey = `${bulkKey(mapped.name)}|||${bulkKey(mapped.category)}`
+      if (mapped.name.trim() && mapped.category.trim()) {
+        if (firstRow.has(itemKey)) errors.push(`Same item as row ${firstRow.get(itemKey)} — combine them into one row`)
+        else firstRow.set(itemKey, rowIndex + 2)
+      }
+      const isUpdate = !!existingBulkKeys.data?.has(itemKey)
       return { rowIndex, data: normalizeBulkImportRow(mapped), errors, isUpdate }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -181,13 +189,14 @@ export function ImportWizard({ target }: { target: ImportTarget }) {
   const createCount = validRows.filter((r) => !r.isUpdate).length
   const updateCount = validRows.filter((r) => r.isUpdate).length
 
-  async function handleCommit() {
+  async function handleCommit(confirmRepeat = false) {
     setError(null)
     try {
       if (isBulk) {
         const result = await commitBulk.mutateAsync({
           filename,
           rows: bulkRows.filter((r) => r.errors.length === 0).map((r) => r.data),
+          confirmRepeat,
         })
         setResult(result)
       } else {
@@ -204,6 +213,40 @@ export function ImportWizard({ target }: { target: ImportTarget }) {
   }
 
   const isCommitting = commitAsset.isPending || commitBulk.isPending
+
+  if (step === 'done' && result && 'duplicate_of' in result && result.duplicate_of) {
+    const prev = result.duplicate_of
+    return (
+      <div className="card mx-auto max-w-2xl space-y-3" role="region" aria-label="Already imported">
+        <h2 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">Nothing was added</h2>
+        <p className="text-sm text-neutral-700 dark:text-neutral-300">
+          This file has the same items and quantities as <span className="font-medium">{prev.filename}</span>, imported{' '}
+          {new Date(prev.imported_at).toLocaleString()}
+          {prev.imported_by ? ` by ${prev.imported_by}` : ''}. Bulk Stock is unchanged.
+        </p>
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+          Only if this really is a second, separate delivery of exactly the same items should the quantities be added again.
+        </p>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={confirmNewDelivery} onChange={(e) => setConfirmNewDelivery(e.target.checked)} />
+          Yes — this is a new delivery, add these quantities again
+        </label>
+        {error && (
+          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+            {error}
+          </p>
+        )}
+        <div className="flex justify-end gap-2">
+          <button className="btn-secondary" onClick={() => navigate(TARGET_PATH[target])}>
+            Leave stock unchanged
+          </button>
+          <button className="btn-primary" disabled={!confirmNewDelivery || isCommitting} onClick={() => void handleCommit(true)}>
+            {isCommitting ? 'Adding…' : 'Add as a new delivery'}
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   if (step === 'done' && result) {
     return (
@@ -321,6 +364,12 @@ export function ImportWizard({ target }: { target: ImportTarget }) {
               <Stat label={isBulk ? 'To update' : 'Already in the ledger'} value={updateCount} />
               <Stat label="Errors (skipped)" value={errorRows.length} tone={errorRows.length ? 'warn' : undefined} />
             </div>
+            {isBulk && (
+              <p className="mt-3 text-xs text-neutral-500">
+                Each row is a delivery: its Quantity received is added to Available. It is not the stock total. Importing a
+                file with the same items and quantities again adds nothing unless you confirm it is a new delivery.
+              </p>
+            )}
             {!isBulk && (
               <p className="mt-3 text-xs text-neutral-500">
                 For devices already in the ledger, only a changed Name, Category or Location is updated; empty
@@ -391,7 +440,7 @@ export function ImportWizard({ target }: { target: ImportTarget }) {
             <button
               className="btn-primary"
               disabled={isCommitting || validRows.length === 0}
-              onClick={() => void handleCommit()}
+              onClick={() => void handleCommit(false)}
             >
               {isCommitting
                 ? 'Importing…'
@@ -464,6 +513,8 @@ function IssueList({
     </section>
   )
 }
+
+const bulkKey = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase()
 
 function Stat({ label, value, tone }: { label: string; value: number; tone?: 'warn' }) {
   return (
