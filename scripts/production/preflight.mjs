@@ -23,7 +23,6 @@ const report = (status, check, value, note = '') => rows.push({ status, check, v
 const q = async (sql, params = []) => (await client.query(sql, params)).rows
 const one = async (sql, params = []) => (await q(sql, params))[0]
 const exists = async (rel) => !!(await one(`select to_regclass($1) is not null as e`, [rel])).e
-const fnExists = async (sig) => !!(await one(`select to_regprocedure($1) is not null as e`, [sig])).e
 
 try {
   await client.query('begin read only')

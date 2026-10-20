@@ -34,6 +34,13 @@ drop function revoke_user_access(uuid, text);
 drop function restore_user_access(uuid, text);
 drop trigger profiles_keep_revoked_viewer on profiles;
 drop function keep_revoked_profile_viewer();
+drop trigger profiles_keep_one_active_admin on profiles;
+drop function keep_one_active_admin();
+-- As in 20260901000022.
+drop policy profiles_update_admin_or_self on profiles;
+create policy profiles_update_admin_or_self on profiles
+  for update using ((is_admin() or id = auth.uid()) and not is_anonymous_session())
+  with check ((is_admin() or id = auth.uid()) and not is_anonymous_session());
 drop policy profile_access_history_select_admin on profile_access_history;
 drop table profile_access_history;
 

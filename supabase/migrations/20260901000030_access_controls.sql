@@ -15,8 +15,9 @@
 --    accounts (so they read nothing). restore_user_access() puts the
 --    previous role back. Both are admin-only, can't target yourself, never
 --    remove the last admin, and are logged in profile_access_history.
---    A revoked account's role can't be raised without restoring it first.
---    Deleting profiles is no longer allowed at all.
+--    A revoked account's role can't be raised without restoring it first,
+--    and it can't edit even its own profile. The last active admin can't
+--    be demoted or revoked. Deleting profiles is no longer allowed at all.
 --
 -- 3. MFA for administrative access: is_admin() — which gates role
 --    changes, restore, access revocation and every admin-only policy —
@@ -101,6 +102,33 @@ as $$
 $$;
 
 create policy profile_access_history_select_admin on profile_access_history for select using (is_admin());
+
+-- A revoked account can't even edit its own row (it can't read it either).
+drop policy profiles_update_admin_or_self on profiles;
+create policy profiles_update_admin_or_self on profiles
+  for update using ((is_admin() or (id = auth.uid() and is_known_user())) and not is_anonymous_session())
+  with check ((is_admin() or (id = auth.uid() and is_known_user())) and not is_anonymous_session());
+
+-- The last active admin can't be demoted (nor revoked — see below), so the
+-- system always keeps someone who can manage roles and restore access.
+create function keep_one_active_admin()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if old.role = 'admin' and old.access_revoked_at is null
+     and (new.role <> 'admin' or new.access_revoked_at is not null)
+     and not exists (select 1 from profiles where role = 'admin' and access_revoked_at is null and id <> old.id) then
+    raise exception 'This is the last active admin — make someone else an admin first' using errcode = 'check_violation';
+  end if;
+  return new;
+end;
+$$;
+create trigger profiles_keep_one_active_admin
+  before update on profiles
+  for each row execute function keep_one_active_admin();
 
 -- Deleting a profile would orphan (or block on) every history row it
 -- authored; access is revoked instead.
@@ -200,6 +228,7 @@ end;
 $$;
 
 revoke execute on function keep_revoked_profile_viewer() from public, anon, authenticated;
+revoke execute on function keep_one_active_admin() from public, anon, authenticated;
 revoke execute on function revoke_user_access(uuid, text) from public, anon;
 revoke execute on function restore_user_access(uuid, text) from public, anon;
 grant execute on function revoke_user_access(uuid, text) to authenticated;

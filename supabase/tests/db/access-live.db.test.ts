@@ -34,6 +34,17 @@ describe.skipIf(!isStaging)('030 access controls on the live staging database (r
       expect(await one(`select role, access_revoked_at is not null as revoked, role_before_revoke from profiles where id = $1`, [EDITOR.id])).toEqual({ role: 'viewer', revoked: true, role_before_revoke: 'editor' })
       await actAs(db, EDITOR)
       expect((await one<{ n: number }>(`select count(*)::int as n from serialized_assets`)).n).toBe(0)
+      // Nothing readable anywhere on the real staging data (an aggregate view's single all-zero row counts as nothing).
+      const rels = (await db.query<{ name: string }>(`select c.relname as name from pg_class c join pg_namespace s on s.oid = c.relnamespace where s.nspname = 'public' and c.relkind in ('r', 'v') order by 1`)).rows
+      const leaks: string[] = []
+      for (const r of rels) {
+        await db.query('savepoint p')
+        const res = await db.query<{ n: number }>(`select count(*)::int as n from ${r.name} r where exists (select 1 from json_each_text(row_to_json(r)) j where j.value is not null and j.value <> '0')`).then((x) => x.rows[0].n, () => -1)
+        await db.query(res === -1 ? 'rollback to savepoint p' : 'release savepoint p')
+        if (res > 0) leaks.push(`${r.name}=${res}`)
+      }
+      expect(leaks).toEqual([])
+      expect((await db.query(`update profiles set full_name = 'ZZ changed' where id = $1`, [EDITOR.id])).rowCount).toBe(0)
       await actAs(db, ADMIN)
       await rpc(db, `restore_user_access($1)`, [EDITOR.id])
       expect((await one(`select role from profiles where id = $1`, [EDITOR.id])).role).toBe('editor')
