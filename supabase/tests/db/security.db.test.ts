@@ -316,7 +316,7 @@ describe('3. anonymous sessions have no read or write access', () => {
         ).toMatch(/row-level security/)
         expect(
           await errorOf(db, `insert into import_events (target_collection, filename) values ('x', 'y')`),
-        ).toMatch(/row-level security/)
+        ).toMatch(/row-level security|permission denied/) // the grant itself is revoked from 20260901000030
         expect(
           await errorOf(db, `insert into serialized_asset_history (asset_id, action) values ($1, 'x')`, [
             ids.inventoryLaptop,
