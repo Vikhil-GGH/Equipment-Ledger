@@ -63,7 +63,13 @@ describe('3: Bulk Stock import — deliveries, never counted twice', () => {
     expect(again).toBeDisabled()
     await user.click(screen.getByRole('checkbox', { name: /this is a new delivery/ }))
     await user.click(again)
-    expect(commit).toHaveBeenLastCalledWith(expect.objectContaining({ confirmRepeat: true }))
+    // The confirmation resends exactly the rows that were checked — not an empty list.
+    expect(commit).toHaveBeenLastCalledWith({
+      filename: 'delivery.xlsx',
+      rows: [{ name: 'Wireless Mouse', category: 'Accessory', location: '', quantity: 10 }],
+      confirmRepeat: true,
+    })
+    expect(commit.mock.calls[1][0].rows).toEqual(commit.mock.calls[0][0].rows)
     expect(await screen.findByText(/0 created, 1 updated/)).toBeInTheDocument()
   })
 })

@@ -88,6 +88,7 @@ export function ImportWizard({ target }: { target: ImportTarget }) {
   // Spreadsheet row number of each committed row (the server numbers them 1…n).
   const [sheetRowNumbers, setSheetRowNumbers] = useState<number[]>([])
   const [confirmNewDelivery, setConfirmNewDelivery] = useState(false)
+  const [committedBulkRows, setCommittedBulkRows] = useState<NormalizedBulkImportRow[]>([])
 
   const existingSerials = useExistingSerials(
     (isBulk ? 'serialized_assets' : target) as AssetCollection,
@@ -193,11 +194,11 @@ export function ImportWizard({ target }: { target: ImportTarget }) {
     setError(null)
     try {
       if (isBulk) {
-        const result = await commitBulk.mutateAsync({
-          filename,
-          rows: bulkRows.filter((r) => r.errors.length === 0).map((r) => r.data),
-          confirmRepeat,
-        })
+        // A confirmed repeat must resend exactly the rows that were checked
+        // (the preview rows are no longer computed once the import is done).
+        const rows = confirmRepeat ? committedBulkRows : bulkRows.filter((r) => r.errors.length === 0).map((r) => r.data)
+        const result = await commitBulk.mutateAsync({ filename, rows, confirmRepeat })
+        setCommittedBulkRows(rows)
         setResult(result)
       } else {
         const committed = assetRows.filter((r) => r.errors.length === 0)
