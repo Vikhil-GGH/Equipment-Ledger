@@ -5,6 +5,7 @@
  * database, where safeguards.db.test.ts covers the same ground and more.
  * The concurrency test needs two real connections.
  */
+import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { actAs, actAsDatabase, inRolledBackTx, isStaging, openDb, tableHash, type Db } from './harness'
 import { EDITOR, rpc, seedLedger, seedUsers } from './fixtures'
@@ -137,5 +138,49 @@ describe.skipIf(!isStaging)('029 safeguards on the live staging database (rolled
     }
     await actAsDatabase(db)
     expect((await one<{ n: number }>(db, `select count(*)::int as n from bulk_items where name = $1`, [`${tag} Cable`])).n).toBe(0)
+  })
+
+  it('concurrency, both complete: two identical imports at once record one delivery; a second needs explicit confirmation', async () => {
+    const rows = JSON.stringify([{ name: `${tag} Hub`, category: 'Accessory', location: '', quantity: 6 }])
+    const stockB = async () => (await one<{ a: number | null }>(db2, `select (select available from bulk_items where name = $1) as a`, [`${tag} Hub`])).a
+    const receiptsB = async () => (await one<{ n: number }>(db2, `select count(*)::int as n from bulk_import_receipts where filename like 'zz-conc-%'`)).n
+    const bUser = { id: randomUUID(), email: `zz-conc-${tag.toLowerCase()}@example.invalid`, anonymous: false }
+    await db.exec('begin')
+    await db2.exec('begin')
+    try {
+      // Connection A: an import of this content is in progress (uncommitted, holds the lock).
+      await seedUsers(db)
+      await actAs(db, EDITOR)
+      expect(await rpc(db, `commit_bulk_import('zz-conc-a.xlsx', $1::jsonb)`, [rows])).toMatchObject({ created: 1 })
+      // Connection B: its own temporary editor (so it waits only on the import lock).
+      await actAsDatabase(db2)
+      await db2.query(`insert into auth.users (id, email, is_anonymous) values ($1, $2, false)`, [bUser.id, bUser.email])
+      await db2.query(`update profiles set role = 'editor' where id = $1`, [bUser.id])
+      await actAs(db2, bUser)
+      await db2.exec(`set local lock_timeout = '30s'`)
+      let bDone = false
+      const b = db2.query<{ r: Record<string, any> }>(`select commit_bulk_import('zz-conc-b.xlsx', $1::jsonb) as r`, [rows]).then((x) => { bDone = true; return x.rows[0].r })
+      await new Promise((r) => setTimeout(r, 2500))
+      expect(bDone).toBe(false) // B is waiting for A
+      // A finishes (rolled back — nothing is ever committed), B then completes.
+      await db.exec('rollback')
+      const bResult = await b
+      expect(bResult).toMatchObject({ created: 1 })
+      expect(await stockB()).toBe(6) // counted once
+      expect(await receiptsB()).toBe(1)
+      // The same content again on B: nothing added.
+      expect((await db2.query<{ r: Record<string, any> }>(`select commit_bulk_import('zz-conc-c.xlsx', $1::jsonb) as r`, [rows])).rows[0].r).toMatchObject({ created: 0, updated: 0, duplicate_of: { filename: 'zz-conc-b.xlsx' } })
+      expect(await stockB()).toBe(6)
+      expect(await receiptsB()).toBe(1)
+      // Only an explicit confirmation records a second delivery.
+      expect((await db2.query<{ r: Record<string, any> }>(`select commit_bulk_import('zz-conc-d.xlsx', $1::jsonb, true) as r`, [rows])).rows[0].r).toMatchObject({ updated: 1, repeat_of: expect.any(String) })
+      expect(await stockB()).toBe(12)
+      expect(await receiptsB()).toBe(2)
+    } finally {
+      await db2.exec('rollback').catch(() => {})
+      await db.exec('rollback').catch(() => {})
+    }
+    await actAsDatabase(db)
+    expect((await one<{ n: number }>(db, `select (select count(*) from bulk_items where name = $1)::int + (select count(*) from bulk_import_receipts where filename like 'zz-conc-%')::int + (select count(*) from auth.users where id = $2)::int as n`, [`${tag} Hub`, bUser.id])).n).toBe(0)
   })
 })
