@@ -8,19 +8,19 @@
  * production (lib.mjs).
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { fetchAllRows, type PagedSource } from '../../../src/lib/fetchAllRows'
 import { BACKUP_TABLES, OPTIONAL_BACKUP_TABLES } from '../../../src/features/data/backupFile'
+import { signInReader } from './reader'
 // @ts-expect-error — plain .mjs helper shared with the other staging scripts
 import { loadStagingEnv } from '../../../scripts/staging/lib.mjs'
 
 const env = loadStagingEnv(['STAGING_ADMIN_EMAIL', 'STAGING_ADMIN_PASSWORD']) as Record<string, string>
 let c: SupabaseClient
 
+
 beforeAll(async () => {
-  c = createClient(env.VITE_STAGING_SUPABASE_URL, env.VITE_STAGING_SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false } })
-  const { error } = await c.auth.signInWithPassword({ email: env.STAGING_ADMIN_EMAIL, password: env.STAGING_ADMIN_PASSWORD })
-  if (error) throw error
+  ;({ c } = await signInReader(env)) // a synthetic viewer once 031 is applied (reader.ts)
 }, 60_000)
 afterAll(async () => {
   await c?.auth.signOut()

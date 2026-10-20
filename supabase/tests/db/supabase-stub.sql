@@ -32,6 +32,18 @@ create table auth.users (
   created_at timestamptz not null default now()
 );
 
+-- Supabase Auth's MFA factors (the columns the migrations read, and the
+-- NOT NULL columns of the real table, so test inserts work on both).
+create table auth.mfa_factors (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  friendly_name text,
+  factor_type text not null,
+  status text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create function auth.uid() returns uuid
 language sql stable as $$
   select coalesce(

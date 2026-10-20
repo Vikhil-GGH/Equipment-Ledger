@@ -15,7 +15,9 @@ The root is Supabase's own, not a public CA, so Node and `psql` can't verify it 
 ## Get the CA certificate (once per project)
 
 1. Supabase dashboard → the project → **Project Settings → Database → SSL Configuration → Download certificate**. The file is usually named `prod-ca-2021.crt`.
-2. Do it separately for staging and for production, and take the file only from the dashboard. Never trust the copy the server sends during the handshake: that would verify the server against itself.
+   Supabase also publishes the same CA over HTTPS at `https://supabase-downloads.s3-ap-southeast-1.amazonaws.com/prod/ssl/prod-ca-2021.crt`.
+   **Staging (2026-10-20)** uses that published copy, saved as `certs/supabase-ca-2021.crt`. Its SHA-256 matched the root the staging server presents, so two independent channels agree.
+2. For production, download it from the dashboard and confirm the fingerprint matches before relying on it. Never trust *only* the copy the server sends during the handshake: that would verify the server against itself.
 3. Optional cross-check: `openssl x509 -in prod-ca-2021.crt -noout -subject -enddate -fingerprint -sha256` should show `CN=Supabase Root 2021 CA`. On staging the server's chain ends in a root with SHA-256 fingerprint `80:70:25:AD:50:D4:ED:21:9D:2C:9C:7D:29:9C:00:4F:82:4E:B0:0C:F7:F6:5A:FE:F6:07:D0:7B:72:E6:CA:FA`.
 
 The certificate is public (it isn't a secret), but keep it out of git anyway, so each environment's file is chosen deliberately. `certs/` is the suggested place (add it to `.gitignore` first).
@@ -25,7 +27,7 @@ The certificate is public (it isn't a secret), but keep it out of git anyway, so
 In `.env.staging.local`:
 
 ```
-STAGING_DB_SSL_CA=certs/supabase-staging-ca.crt
+STAGING_DB_SSL_CA=certs/supabase-ca-2021.crt
 ```
 
 The path is relative to the repository, or absolute. Every staging script (`staging:snapshot`, `staging:migrate`, `staging:test-db`, …) then verifies the server and stops printing the warning. A wrong or missing file stops the script.

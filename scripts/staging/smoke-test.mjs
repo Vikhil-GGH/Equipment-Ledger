@@ -160,19 +160,41 @@ async function postPhase() {
     }
   }
 
-  // C. Admin — read-only.
+  // C. Admin — read-only. Since 031 a password-only admin session (these
+  // checks never automate anyone's two-factor) must see nothing but its own
+  // profile; the full reads then use the synthetic staging viewer.
   const a = await signInAs(env.STAGING_ADMIN_EMAIL, env.STAGING_ADMIN_PASSWORD)
   if (a.error) {
     record('FAIL', 'admin', 'staging admin can sign in', a.error.message)
     return
   }
-  await adminReadOnly(a.c, a.user)
+  const has031 = !(await a.c.rpc('session_role')).error
+  if (!has031) return readOnly(a.c, a.user, 'admin (read-only)', 'admin')
+  await passwordOnlyAdmin(a.c, a.user)
+  if (!env.STAGING_READER_EMAIL || !env.STAGING_READER_PASSWORD) {
+    record('FAIL', 'reader', 'read checks need STAGING_READER_EMAIL / STAGING_READER_PASSWORD (a synthetic staging viewer)', 'not set')
+    return
+  }
+  const r = await signInAs(env.STAGING_READER_EMAIL, env.STAGING_READER_PASSWORD)
+  if (r.error) return record('FAIL', 'reader', 'synthetic reader can sign in', r.error.message)
+  await readOnly(r.c, r.user, 'reader (read-only)', 'viewer')
 }
 
-async function adminReadOnly(c, user) {
-  const A = 'admin (read-only)'
+async function passwordOnlyAdmin(c, user) {
+  const A = 'admin, password only (031)'
+  const [{ data: stored }, { data: effective }] = await Promise.all([c.rpc('my_role'), c.rpc('session_role')])
+  record(stored === 'admin' && effective === null ? 'PASS' : 'FAIL', A, 'stored role admin, effective role none until two-factor', `${stored} / ${effective}`)
+  const own = await c.from('profiles').select('id')
+  record(own.data?.length === 1 && own.data[0].id === user.id ? 'PASS' : 'FAIL', A, 'sees only its own profile', own.error?.message ?? `${own.data?.length} row(s)`)
+  for (const t of [...BACKUP_TABLES, ...REGISTER_TABLES].filter((t) => t !== 'profiles')) {
+    const { count, error } = await c.from(t).select('*', { count: 'exact', head: true })
+    record(!error && count === 0 ? 'PASS' : 'FAIL', A, `reads nothing from ${t}`, error?.message ?? `${count} rows`)
+  }
+}
+
+async function readOnly(c, user, A, expectedRole) {
   const prof = await c.from('profiles').select('role').eq('id', user.id).single()
-  record(prof.data?.role === 'admin' ? 'PASS' : 'FAIL', A, 'profile role is admin', prof.error?.message ?? prof.data?.role)
+  record(prof.data?.role === expectedRole ? 'PASS' : 'FAIL', A, `profile role is ${expectedRole}`, prof.error?.message ?? prof.data?.role)
   for (const t of [...BACKUP_TABLES, ...REGISTER_TABLES]) {
     // A full export, as the Data page does — plus a check nothing is cut off (audit C5).
     const [{ data, error }, { count }] = await Promise.all([c.from(t).select('*'), c.from(t).select('*', { count: 'exact', head: true })])

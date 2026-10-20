@@ -14,27 +14,27 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { signInReader } from './reader'
 // @ts-expect-error — plain .mjs helper shared with the other staging scripts
 import { loadStagingEnv } from '../../../scripts/staging/lib.mjs'
 
 const env = loadStagingEnv(['STAGING_ADMIN_EMAIL', 'STAGING_ADMIN_PASSWORD']) as Record<string, string>
 const NO_SUCH_ID = '00000000-0000-0000-0000-000000000000'
 let c: SupabaseClient
+let role = ''
 let anon: SupabaseClient
 
 beforeAll(async () => {
   const opts = { auth: { persistSession: false, autoRefreshToken: false } }
-  c = createClient(env.VITE_STAGING_SUPABASE_URL, env.VITE_STAGING_SUPABASE_ANON_KEY, opts)
   anon = createClient(env.VITE_STAGING_SUPABASE_URL, env.VITE_STAGING_SUPABASE_ANON_KEY, opts) // signed out
-  const { error } = await c.auth.signInWithPassword({ email: env.STAGING_ADMIN_EMAIL, password: env.STAGING_ADMIN_PASSWORD })
-  if (error) throw error
+  ;({ c, role } = await signInReader(env)) // a synthetic viewer once 031 is applied (reader.ts)
 }, 60_000)
 afterAll(async () => {
   await c?.auth.signOut()
 })
 
 describe('employee equipment register through the real API (read-only)', () => {
-  it('the new tables and views are exposed to the signed-in admin', async () => {
+  it('the new tables and views are exposed to the signed-in reader', async () => {
     for (const t of ['employees', 'equipment_issues', 'employee_possible_duplicates', 'equipment_register_mismatches']) {
       const { error } = await c.from(t).select('*', { head: true, count: 'exact' })
       expect(error, t).toBeNull()
@@ -42,14 +42,16 @@ describe('employee equipment register through the real API (read-only)', () => {
   })
 
   it('the functions are exposed with the right parameters — exercised only where they reject before writing', async () => {
+    // A viewer (the synthetic reader, after 031) is refused before any check; an editor/admin reaches the validation.
+    const viewer = role === 'viewer'
     const issue = await c.rpc('issue_equipment', { p_employee_id: NO_SUCH_ID, p_collection: 'serialized_assets', p_asset_id: NO_SUCH_ID })
-    expect(issue.error?.message).toMatch(/Employee not found/)
+    expect(issue.error?.message).toMatch(viewer ? /Not authorized/ : /Employee not found/)
     const ret = await c.rpc('return_equipment', { p_issue_id: NO_SUCH_ID, p_outcome: 'returned' })
-    expect(ret.error?.message).toMatch(/Register entry not found/)
+    expect(ret.error?.message).toMatch(viewer ? /Not authorized/ : /Register entry not found/)
     const notOutcome = await c.rpc('return_equipment', { p_issue_id: NO_SUCH_ID, p_outcome: 'open' })
-    expect(notOutcome.error?.message).toMatch(/Not a return outcome/)
+    expect(notOutcome.error?.message).toMatch(viewer ? /Not authorized|Not a return outcome/ : /Not a return outcome/)
     const emp = await c.rpc('create_employee', { p_full_name: '   ' })
-    expect(emp.error?.message).toMatch(/A name is required/)
+    expect(emp.error?.message).toMatch(viewer ? /Not authorized/ : /A name is required/)
   })
 
   it('a signed-out visitor sees nothing and cannot call the functions', async () => {

@@ -12,8 +12,9 @@
  * rolled back. Refuses to run against production (lib.mjs).
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import * as XLSX from 'xlsx'
+import { signInReader } from './reader'
 // @ts-expect-error — plain .mjs helper shared with the other staging scripts
 import { loadStagingEnv } from '../../../scripts/staging/lib.mjs'
 import {
@@ -28,6 +29,7 @@ import { offboardingProgress } from '../../../src/features/offboarding/offboardi
 
 const env = loadStagingEnv(['STAGING_ADMIN_EMAIL', 'STAGING_ADMIN_PASSWORD']) as Record<string, string>
 let c: SupabaseClient
+
 
 async function fetchAll(table: 'serialized_assets' | 'active_laptops_np'): Promise<LaptopRecord[]> {
   const out: LaptopRecord[] = []
@@ -49,11 +51,7 @@ const inventory = async () => combineLaptops(await fetchAll('serialized_assets')
 const ALL = { tab: 'all', scope: 'all', search: '', sort: DEFAULT_LAPTOP_SORT } as const
 
 beforeAll(async () => {
-  c = createClient(env.VITE_STAGING_SUPABASE_URL, env.VITE_STAGING_SUPABASE_ANON_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  })
-  const { error } = await c.auth.signInWithPassword({ email: env.STAGING_ADMIN_EMAIL, password: env.STAGING_ADMIN_PASSWORD })
-  if (error) throw error
+  ;({ c } = await signInReader(env)) // a synthetic viewer once 031 is applied (reader.ts)
 }, 60_000)
 afterAll(async () => {
   await c?.auth.signOut()

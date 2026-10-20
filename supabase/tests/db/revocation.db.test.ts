@@ -19,10 +19,11 @@ import {
   openDb,
   readAdaptation,
   tableHash,
+  tryQuery,
   type Db,
   type TestUser,
 } from './harness'
-import { ADMIN, EDITOR, VIEWER, rpc, seedLedger, seedUsers, type LedgerIds } from './fixtures'
+import { ADMIN, EDITOR, VIEWER, addVerifiedFactor, rpc, seedLedger, seedUsers, type LedgerIds } from './fixtures'
 
 let db: Db
 let ids: LedgerIds
@@ -45,6 +46,7 @@ async function everything() {
 }
 const addUser = async (u: TestUser, role: string) => {
   await db.query(`insert into auth.users (id, email, is_anonymous) values ($1, $2, false) on conflict do nothing`, [u.id, u.email])
+  if (role === 'admin') await addVerifiedFactor(db, u.id) // 031
   await db.query(`update profiles set role = $2 where id = $1`, [u.id, role])
 }
 
@@ -190,7 +192,9 @@ describe.skipIf(isStaging)('2. MFA is enforced in the database for admin powers'
     await addUser(SECOND_ADMIN, 'admin') // so the last-admin guard isn't what refuses the self-demotion below
     await actAs(db, ADMIN, { aal: 'aal1' })
     expect((await db.query(`update profiles set role = 'viewer' where id = $1`, [VIEWER.id])).rowCount).toBe(0)
-    expect(await errorOf(db, `update profiles set role = 'viewer' where id = $1`, [ADMIN.id])).toMatch(/Only an admin can change a user role/)
+    // Own role: refused — since 031 the row isn't even visible to a password-only admin (0 rows), before that by the role trigger.
+    const self = await tryQuery(db, `update profiles set role = 'viewer' where id = $1`, [ADMIN.id])
+    expect('error' in self ? /Only an admin can change a user role/.test(self.error) : self.rowCount === 0).toBe(true)
     expect(await errorOf(db, `select revoke_user_access($1)`, [VIEWER.id])).toMatch(/two-factor/)
     expect(await errorOf(db, `select restore_user_access($1)`, [REVOKED.id])).toMatch(/two-factor/)
     expect(await errorOf(db, `select restore_backup('{}'::jsonb)`)).toMatch(/Only an admin/)

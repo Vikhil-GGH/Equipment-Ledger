@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyNewRows } from './classify.mjs'
+import { classifyNewRows, isSyntheticRecord } from './classify.mjs'
 
 const ACC = '20ce638b-a70b-425f-a54a-09a59fe28acb' // synthetic account
 const ACC2 = '88dec702-8c41-485c-b2fb-40e50e2b191f' // synthetic account
@@ -41,13 +41,13 @@ describe('classifyNewRows', () => {
   it('flags synthetic rows that reference an existing account (e.g. a synthetic admin acting on a real user)', () => {
     const r = classifyNewRows({ ...base, newRows: { profile_access_history: [{ id: 'h2', user_id: REAL, actor_user_id: ACC }] } })
     expect(r.profile_access_history.synthetic).toBe(1)
-    expect(r.profile_access_history.touchesExistingAccount).toHaveLength(1)
+    expect(r.profile_access_history.touchesExistingAccount).toMatchObject([{ refs: [{ column: 'user_id', id: REAL }], onlyAsActor: false }])
   })
 
   it('an existing user acting on a synthetic account is synthetic but reported as touching an existing account', () => {
     const r = classifyNewRows({ ...base, newRows: { profile_access_history: [{ id: 'h3', user_id: ACC, actor_user_id: REAL }] } })
     expect(r.profile_access_history.unexpected).toEqual([])
-    expect(r.profile_access_history.touchesExistingAccount).toHaveLength(1)
+    expect(r.profile_access_history.touchesExistingAccount).toMatchObject([{ refs: [{ column: 'actor_user_id', id: REAL }], onlyAsActor: true }])
   })
 
   it('tags match case-insensitively and inside nested JSON; other tags do not match', () => {
@@ -57,5 +57,12 @@ describe('classifyNewRows', () => {
     })
     expect(r.import_events.synthetic).toBe(1)
     expect(r.import_events.unexpected.map((x) => x.id)).toEqual(['i2'])
+  })
+
+  it('isSyntheticRecord: an existing row is synthetic by its own id (a synthetic account) or a tag — not by what it references', () => {
+    const src = { tags: ['ZZ-ACC-1619'], syntheticIds: [ACC] }
+    expect(isSyntheticRecord({ id: ACC, email: 'x@example.invalid' }, 'id', src)).toBe(true)
+    expect(isSyntheticRecord({ id: 'ob1', employee_name: 'ZZ-ACC-1619 Onboarding' }, 'id', src)).toBe(true)
+    expect(isSyntheticRecord({ id: REAL, access_revoked_by: ACC }, 'id', src)).toBe(false)
   })
 })

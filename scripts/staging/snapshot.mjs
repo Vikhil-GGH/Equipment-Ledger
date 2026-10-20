@@ -6,7 +6,7 @@
 //   npm run staging:snapshot -- save pre-025      before a migration
 //   npm run staging:snapshot -- compare pre-025   after it: proves which
 //                                                 pre-existing data changed
-//   … compare pre-025 --tag ZZ-SYN-1031 --authorized-mfa admin@example.com
+//   … compare pre-025 --tag ZZ-SYN-1031 --authorized-mfa admin@example.com --authorized-actor admin@example.com
 //
 // compare also checks every pre-existing row by primary key (columns it had
 // at the snapshot), then classifies every NEW row — in old and new tables —
@@ -16,6 +16,10 @@
 // fingerprint: email, password hash, ban, deletion, role, metadata) and MFA
 // factor type/status per account — never secrets. A new factor on an
 // existing account counts as authorized only with --authorized-mfa <email>.
+// A synthetic record may itself change (e.g. a test account's access is
+// removed); a new synthetic row that names an existing account ONLY as the
+// actor (actor_user_id, created_by, …) needs --authorized-actor <email>;
+// one that concerns an existing account in any other way always fails.
 //
 // "compare" fingerprints each table using only the columns it had when the
 // snapshot was taken, so columns a migration ADDS don't count as changes.
@@ -24,7 +28,7 @@
 import { mkdirSync, readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { ROOT, connectStagingDb, fail, loadStagingEnv } from './lib.mjs'
-import { classifyNewRows } from './classify.mjs'
+import { classifyNewRows, isSyntheticRecord } from './classify.mjs'
 
 const [mode, label, ...rest] = process.argv.slice(2)
 if (!['save', 'compare'].includes(mode) || !/^[\w.-]+$/.test(label ?? '')) {
@@ -164,8 +168,11 @@ try {
     // ---- Row level: every pre-existing row by primary key; every new row classified.
     const data = JSON.parse(readFileSync(join(dir, 'data.json'), 'utf8'))
     const pk = await primaryKeys()
+    const src = syntheticSources()
+    const syn = new Set(src.ids)
     const newRows = {}
     const rowProblems = []
+    const syntheticChanges = []
     for (const { table_name: table } of now) {
       const m = manifest.tables[table]
       const key = pk[table] ?? 'id'
@@ -179,7 +186,10 @@ try {
         if (!old) newRows[table].push(r.j)
         else {
           before.delete(r.k)
-          if (pick(old) !== pick(r.j)) rowProblems.push(`${table} ${r.k} changed`)
+          if (pick(old) === pick(r.j)) continue
+          // A synthetic record (e.g. a test account's profile) may change; anything else may not.
+          if (isSyntheticRecord(old, key, src) && isSyntheticRecord(r.j, key, src)) syntheticChanges.push(`${table} ${r.k}`)
+          else rowProblems.push(`${table} ${r.k} changed`)
         }
       }
       for (const k of before.keys()) rowProblems.push(`${table} ${k} missing`)
@@ -188,8 +198,6 @@ try {
     // ---- Auth (non-secret fingerprints and factor status only).
     const auth = await authSummary()
     const snapAuth = manifest.auth
-    const src = syntheticSources()
-    const syn = new Set(src.ids)
     const existingIds = snapAuth ? snapAuth.users.map((u) => u.id) : auth.users.map((u) => u.id).filter((id) => !syn.has(id))
     const authProblems = []
     const authorized = []
@@ -197,6 +205,7 @@ try {
       const nowFp = new Map(auth.users.map((u) => [u.id, u.fp]))
       for (const u of snapAuth.users) {
         if (!nowFp.has(u.id)) authProblems.push(`login ${u.id} missing`)
+        else if (nowFp.get(u.id) !== u.fp && syn.has(u.id)) syntheticChanges.push(`synthetic login ${u.id}`)
         else if (nowFp.get(u.id) !== u.fp) authProblems.push(`login ${u.id} changed (email, password, ban, deletion, role or metadata)`)
       }
       for (const u of auth.users) if (!snapAuth.users.some((s) => s.id === u.id) && !syn.has(u.id)) authProblems.push(`new login ${u.id} is not a synthetic account`)
@@ -204,6 +213,7 @@ try {
       authProblems.push(`non-synthetic logins: ${existingIds.length}, snapshot had ${manifest.totals.auth_users}`)
     }
     const allowMfa = flag('--authorized-mfa').map((e) => e.toLowerCase())
+    const allowActor = flag('--authorized-actor').map((e) => e.toLowerCase())
     const emails = new Map((await db.query(`select id::text, lower(email) as email from auth.users`)).rows.map((r) => [r.id, r.email]))
     const snapFactors = (snapAuth?.factors ?? []).map((f) => `${f.user_id}|${f.factor_type}|${f.status}`)
     for (const f of auth.factors) {
@@ -221,7 +231,8 @@ try {
 
     const classes = classifyNewRows({ newRows, pk, tags: src.tags, syntheticIds: src.ids, existingAccountIds: existingIds })
     console.log(`\nRow-level check by primary key (synthetic tags: ${src.tags.join(', ') || 'none'}; synthetic accounts: ${src.ids.length}):`)
-    console.log(rowProblems.length ? `  ✖ ${rowProblems.length} pre-existing row(s) changed or missing: ${rowProblems.slice(0, 10).join('; ')}` : '  ✔ every pre-existing row is unchanged')
+    console.log(rowProblems.length ? `  ✖ ${rowProblems.length} pre-existing row(s) changed or missing: ${rowProblems.slice(0, 10).join('; ')}` : '  ✔ every pre-existing non-synthetic row is unchanged')
+    if (syntheticChanges.length) console.log(`  ✔ ${syntheticChanges.length} synthetic record(s) changed: ${syntheticChanges.join('; ')}`)
     let unexpected = 0
     const review = []
     console.log('\nAdded since the snapshot:')
@@ -230,7 +241,11 @@ try {
       console.log(`  ${c.unexpected.length ? '✖' : '✔'} ${table}: +${c.added} — ${c.synthetic} synthetic${c.unexpected.length ? `, ${c.unexpected.length} UNEXPECTED` : ''}`)
       unexpected += c.unexpected.length
       for (const r of c.unexpected.slice(0, 3)) console.log(`      unexpected: ${JSON.stringify(r).slice(0, 240)}`)
-      for (const r of c.touchesExistingAccount) review.push(`${table}: ${JSON.stringify(r).slice(0, 240)}`)
+      for (const t of c.touchesExistingAccount) {
+        const who = [...new Set(t.refs.map((x) => emails.get(x.id) ?? x.id))]
+        if (t.onlyAsActor && who.every((w) => allowActor.includes(w))) authorized.push(`${table}: ${who.join(', ')} acted on a synthetic record (${t.refs.map((x) => x.column).join(', ')}) — authorized actor`)
+        else review.push(`${table} (${t.refs.map((x) => `${x.column}=${emails.get(x.id) ?? x.id}`).join(', ')}): ${JSON.stringify(t.row).slice(0, 200)}`)
+      }
     }
     if (!Object.values(classes).some((c) => c.added)) console.log('  nothing')
     console.log(`  Auth: ${auth.users.filter((u) => syn.has(u.id)).length} synthetic login(s), ${auth.factors.filter((f) => syn.has(f.user_id)).length} synthetic factor(s)`)
@@ -238,14 +253,14 @@ try {
     if (!snapAuth) console.log('  (snapshot predates Auth fingerprints: logins checked by count; factors listed as added)')
     for (const a of authorized) console.log(`  ✔ ${a}`)
     for (const p of authProblems) console.log(`  ✖ ${p}`)
-    for (const r of review) console.log(`  ! review — synthetic row referencing an existing account: ${r}`)
+    for (const r of review) console.log(`  ✖ synthetic row referencing an existing account, not authorized (an actor needs --authorized-actor): ${r}`)
     if (!authorized.length && !authProblems.length && !review.length) console.log('  none')
     const structural = changed.filter((t) => !nowCols[t] || manifest.tables[t].columns.some((c) => !nowCols[t].includes(c)))
-    if (rowProblems.length || unexpected || authProblems.length || structural.length) {
+    if (rowProblems.length || unexpected || authProblems.length || review.length || structural.length) {
       exitCode = 2
       console.log('\n✖ Differences need attention (see above).')
     } else {
-      console.log(`\n✔ Every pre-existing row is unchanged and every addition is synthetic${authorized.length ? '; the only account changes are the authorized ones above' : ''}${review.length ? ' — review the flagged rows' : ''}.`)
+      console.log(`\n✔ Every pre-existing non-synthetic row is unchanged and every addition or change is synthetic${authorized.length ? '; the only changes involving existing accounts are the authorized ones above' : ''}.`)
     }
   }
 } catch (err) {

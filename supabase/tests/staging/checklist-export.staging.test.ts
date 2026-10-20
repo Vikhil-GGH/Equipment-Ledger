@@ -10,7 +10,7 @@ import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import * as XLSX from 'xlsx'
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { PagedSource } from '../../../src/lib/fetchAllRows'
 import {
   buildOffboardingWorkbook,
@@ -24,6 +24,7 @@ import { onboardingProgress } from '../../../src/features/onboarding/onboardingP
 import { offboardingProgress } from '../../../src/features/offboarding/offboardingProgress'
 import type { OnboardingRow } from '../../../src/features/onboarding/api'
 import type { OffboardingRow } from '../../../src/features/offboarding/api'
+import { signInReader } from './reader'
 // @ts-expect-error — plain .mjs helper shared with the other staging scripts
 import { loadStagingEnv } from '../../../scripts/staging/lib.mjs'
 
@@ -35,10 +36,9 @@ const env = loadStagingEnv(['STAGING_ADMIN_EMAIL', 'STAGING_ADMIN_PASSWORD']) as
 const VIEW: ListView = { search: '', statusFilter: 'all', sort: { key: 'started', direction: 'desc' } }
 let c: SupabaseClient
 
+
 beforeAll(async () => {
-  c = createClient(env.VITE_STAGING_SUPABASE_URL, env.VITE_STAGING_SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false } })
-  const { error } = await c.auth.signInWithPassword({ email: env.STAGING_ADMIN_EMAIL, password: env.STAGING_ADMIN_PASSWORD })
-  if (error) throw error
+  ;({ c } = await signInReader(env)) // a synthetic viewer once 031 is applied (reader.ts)
 }, 60_000)
 afterAll(async () => {
   await c?.auth.signOut()

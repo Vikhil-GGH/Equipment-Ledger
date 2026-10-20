@@ -65,14 +65,34 @@ describe('two-factor authentication', () => {
     expect(screen.queryByText('Ledger data')).not.toBeInTheDocument()
   })
 
-  it('accounts without two-factor go straight in; verified sessions too', () => {
-    auth({ aal: { current: 'aal1', next: 'aal1' } })
+  it('non-admins without two-factor go straight in; so do admins with a verified session', () => {
+    auth({ role: 'editor', profile: { id: 'u', email: 'e@example.invalid', full_name: null, role: 'editor' }, aal: { current: 'aal1', next: 'aal1' } })
     const { unmount } = render(<MemoryRouter><RequireAuth><p>Ledger data</p></RequireAuth></MemoryRouter>)
     expect(screen.getByText('Ledger data')).toBeInTheDocument()
     unmount()
     auth({ aal: { current: 'aal2', next: 'aal2' } })
     render(<MemoryRouter><RequireAuth><p>Ledger data</p></RequireAuth></MemoryRouter>)
     expect(screen.getByText('Ledger data')).toBeInTheDocument()
+  })
+
+  it('031: an admin with no authenticator sees only the two-factor setup (and Sign out), never the app', async () => {
+    const signOut = vi.fn()
+    auth({ aal: { current: 'aal1', next: 'aal1' }, signOut })
+    mfa.listFactors.mockResolvedValue({ data: { totp: [] }, error: null })
+    const user = userEvent.setup()
+    render(<MemoryRouter><RequireAuth><p>Ledger data</p></RequireAuth></MemoryRouter>)
+    expect(screen.queryByText('Ledger data')).not.toBeInTheDocument()
+    expect(screen.getByText(/Admin accounts need two-factor authentication before they can see or change anything/)).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Set up two-factor authentication' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Sign out' }))
+    expect(signOut).toHaveBeenCalled()
+  })
+
+  it('031: if the assurance level cannot be read, an admin still gets the setup screen (fails closed)', () => {
+    auth({ aal: null })
+    mfa.listFactors.mockResolvedValue({ data: { totp: [] }, error: null })
+    render(<MemoryRouter><RequireAuth><p>Ledger data</p></RequireAuth></MemoryRouter>)
+    expect(screen.queryByText('Ledger data')).not.toBeInTheDocument()
   })
 
   it('Security page: set up an authenticator — scan, enter the code, turned on', async () => {
@@ -82,7 +102,7 @@ describe('two-factor authentication', () => {
     mfa.challengeAndVerify.mockResolvedValue({ data: {}, error: null })
     const user = userEvent.setup()
     render(<MemoryRouter><SecurityPage /></MemoryRouter>)
-    expect(await screen.findByText(/Off\. Use an authenticator app/)).toHaveTextContent('Admin actions — roles, access, restores — need it.')
+    expect(await screen.findByText(/Off\. Use an authenticator app/)).toHaveTextContent('Admin accounts need it for everything.')
     await user.click(screen.getByRole('button', { name: 'Set up two-factor authentication' }))
     expect(mfa.enroll).toHaveBeenCalledWith(expect.objectContaining({ factorType: 'totp' }))
     expect(screen.getByRole('img', { name: 'QR code for your authenticator app' })).toHaveAttribute('src', 'data:image/svg+xml;utf-8,<svg/>')
@@ -107,6 +127,60 @@ describe('two-factor authentication', () => {
     auth({ role: 'editor', aal: { current: 'aal1', next: 'aal1' } })
     render(<MemoryRouter><AppShell><p>page</p></AppShell></MemoryRouter>)
     expect(screen.queryByText(/need two-factor authentication/)).not.toBeInTheDocument()
+  })
+})
+
+describe('replacing an authenticator (new phone)', () => {
+  const verifiedOld = { id: 'old', status: 'verified', created_at: '2026-10-01T00:00:00Z' }
+  const verifiedNew = { id: 'new', status: 'verified', created_at: '2026-10-20T00:00:00Z' }
+  const startReplace = async () => {
+    auth({ aal: { current: 'aal2', next: 'aal2' } })
+    mfa.enroll.mockResolvedValue({ data: { id: 'new', totp: { qr_code: 'data:image/svg+xml;utf-8,<svg/>', secret: 'NEWSECRET' } }, error: null })
+    const user = userEvent.setup()
+    render(<MemoryRouter><SecurityPage /></MemoryRouter>)
+    await user.click(await screen.findByRole('button', { name: 'Replace authenticator (new phone)' }))
+    expect(screen.getByText('Your current authenticator keeps working until the new one is verified.')).toBeInTheDocument()
+    await user.type(screen.getByRole('textbox', { name: 'Authentication code' }), '111222')
+    await user.click(screen.getByRole('button', { name: 'Turn on' }))
+  }
+
+  it('verifies the new authenticator first, and only then removes the old one', async () => {
+    mfa.listFactors.mockResolvedValueOnce({ data: { totp: [verifiedOld] }, error: null }).mockResolvedValue({ data: { totp: [verifiedNew] }, error: null })
+    const order: string[] = []
+    mfa.challengeAndVerify.mockImplementation(async () => (order.push('verify new'), { data: {}, error: null }))
+    mfa.unenroll.mockImplementation(async ({ factorId }: { factorId: string }) => (order.push(`remove ${factorId}`), { data: {}, error: null }))
+    await startReplace()
+    expect(await screen.findByRole('status')).toHaveTextContent('Your new authenticator is on and the old one is removed.')
+    expect(order).toEqual(['verify new', 'remove old'])
+    expect(mfa.challengeAndVerify).toHaveBeenCalledWith({ factorId: 'new', code: '111222' })
+  })
+
+  it('a wrong code removes nothing — the old authenticator keeps working', async () => {
+    mfa.listFactors.mockResolvedValue({ data: { totp: [verifiedOld] }, error: null })
+    mfa.challengeAndVerify.mockResolvedValue({ data: null, error: { message: 'Invalid TOTP code entered' } })
+    await startReplace()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Invalid TOTP code entered')
+    expect(mfa.unenroll).not.toHaveBeenCalled()
+  })
+
+  it('if removing the old one fails, both stay active and the page says so and offers to retry', async () => {
+    mfa.listFactors.mockResolvedValueOnce({ data: { totp: [verifiedOld] }, error: null }).mockResolvedValue({ data: { totp: [verifiedOld, verifiedNew] }, error: null })
+    mfa.challengeAndVerify.mockResolvedValue({ data: {}, error: null })
+    mfa.unenroll.mockResolvedValueOnce({ data: null, error: { message: 'network down' } }).mockResolvedValue({ data: {}, error: null })
+    await startReplace()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Your new authenticator is on, but the old one is still active: network down.')
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Remove old authenticators' }))
+    expect(mfa.unenroll).toHaveBeenLastCalledWith({ factorId: 'old' }) // the newest is kept
+    expect(await screen.findByRole('status')).toHaveTextContent('Old authenticators removed.')
+  })
+
+  it('replacing is only offered in a verified session', async () => {
+    auth({ role: 'editor', aal: { current: 'aal1', next: 'aal2' } })
+    mfa.listFactors.mockResolvedValue({ data: { totp: [verifiedOld] }, error: null })
+    render(<MemoryRouter><SecurityPage /></MemoryRouter>)
+    expect(await screen.findByText(/On \(verify at sign-in\)/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Replace authenticator/ })).not.toBeInTheDocument()
   })
 })
 

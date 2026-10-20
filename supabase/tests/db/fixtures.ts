@@ -67,8 +67,29 @@ export async function seedUsers(db: Db) {
     [VIEWER, 'viewer'],
   ] as const) {
     await insertAuthUser(db, user)
+    if (role === 'admin') await addVerifiedFactor(db, user.id) // 031: no admin without an authenticator
     await db.query(`update profiles set role = $2 where id = $1`, [user.id, role])
   }
+}
+
+/**
+ * A verified TOTP factor for a test user, as Supabase Auth records one after
+ * the user enrols (required before anyone is made an admin, 031). Columns
+ * match the real auth.mfa_factors, so it also works inside a rolled-back
+ * transaction on staging. Idempotent.
+ */
+export async function addVerifiedFactor(db: Db, userId: string) {
+  // Only where 031 is applied: elsewhere the rule doesn't exist, so the Auth table is left alone.
+  const { rows } = await db.query<{ has: boolean }>(`select to_regprocedure('public.require_mfa_for_new_admin()') is not null as has`)
+  if (!rows[0].has) return
+  const { rows: had } = await db.query(`select 1 from auth.mfa_factors where user_id = $1 and status = 'verified'`, [userId])
+  if (had.length) return
+  // VALUES (not SELECT) so the literals take the column types: text in the stub, enums in Supabase.
+  await db.query(
+    `insert into auth.mfa_factors (id, user_id, friendly_name, factor_type, status, created_at, updated_at)
+     values (gen_random_uuid(), $1, 'test factor', 'totp', 'verified', now(), now())`,
+    [userId],
+  )
 }
 
 /**

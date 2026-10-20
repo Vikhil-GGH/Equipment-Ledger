@@ -9,9 +9,27 @@
 //      new row already found to be synthetic — repeated until nothing changes,
 //      so history rows, register rows, serial keys etc. follow their parent.
 // Rows that pass but also reference an EXISTING account are reported
-// separately: a synthetic actor must never act on a real account.
+// separately (with the columns): a synthetic actor must never act on a real
+// account, while an existing account acting on a synthetic one (e.g. the
+// admin removing a test account's access) is fine when authorized.
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+/** Columns that record WHO did something (as opposed to whom it concerns). */
+export const ACTOR_COLUMNS = new Set(['actor_user_id', 'created_by', 'imported_by', 'issued_by', 'closed_by', 'access_revoked_by', 'requested_by'])
+
+const tagRegex = (tags) => (tags.length ? new RegExp(tags.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'i') : null)
+
+/** Is an EXISTING row (one present at the snapshot) itself a synthetic record? */
+export function isSyntheticRecord(row, pkColumn, { tags, syntheticIds }) {
+  const re = tagRegex(tags)
+  const ids = new Set(syntheticIds.map((s) => s.toLowerCase()))
+  return ids.has(String(row[pkColumn] ?? '').toLowerCase()) || (!!re && valuesOf(row).some((v) => re.test(v)))
+}
+
+/** Columns of a row that hold one of the given account ids. */
+function refsTo(row, accountIds) {
+  return Object.entries(row).filter(([, v]) => typeof v === 'string' && accountIds.has(v.toLowerCase())).map(([column, v]) => ({ column, id: v.toLowerCase() }))
+}
 
 /** Every scalar value in a row, as strings (nested JSON included). */
 function valuesOf(value, out = []) {
@@ -31,7 +49,7 @@ function valuesOf(value, out = []) {
  * @param {string[]} input.existingAccountIds        ids of accounts that existed at the snapshot
  */
 export function classifyNewRows({ newRows, pk, tags, syntheticIds, existingAccountIds }) {
-  const tagRe = tags.length ? new RegExp(tags.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'i') : null
+  const tagRe = tagRegex(tags)
   const synthetic = new Set(syntheticIds.map((s) => s.toLowerCase()))
   const existing = new Set(existingAccountIds.map((s) => s.toLowerCase()))
   const rows = Object.entries(newRows).flatMap(([table, list]) =>
@@ -57,7 +75,8 @@ export function classifyNewRows({ newRows, pk, tags, syntheticIds, existingAccou
     if (!isSyn.get(r)) t.unexpected.push(r.row)
     else {
       t.synthetic++
-      if (r.values.some((v) => UUID.test(v) && existing.has(v.toLowerCase()))) t.touchesExistingAccount.push(r.row)
+      const refs = refsTo(r.row, existing)
+      if (refs.length) t.touchesExistingAccount.push({ row: r.row, refs, onlyAsActor: refs.every((x) => ACTOR_COLUMNS.has(x.column)) })
     }
   }
   return result
