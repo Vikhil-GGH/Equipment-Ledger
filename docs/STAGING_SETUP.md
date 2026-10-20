@@ -432,6 +432,10 @@ Applied to staging on 2026-10-20 after a verified snapshot (`staging-pre-029`, a
 
 Applied to staging on 2026-10-20 after a verified snapshot (`staging-pre-030`, restored into a disposable database and rehearsed there with 030 applied); the comparison afterwards showed every pre-existing row and column unchanged (new: three `profiles` columns, `profile_access_history`). No account was revoked, restored or changed. Remove access now revokes instead of deleting: a revoked account reads nothing and can change nothing, even from a session it already had open, and its previous role is kept for Restore access. Admin powers (role changes, Remove/Restore access, restore backup) need a two-factor (aal2) session; the last active admin can't be demoted or revoked. **Until the staging admin enrols two-factor on the Security page, they can't change roles or access** (they still have editor-level access). Rollback: `supabase/rollback/20260901000030_down.sql` (refuses while any account is revoked; run before `20260901000029_down.sql`). After applying: `npm run staging:test-db` (includes `access-live`, rolled back, temporary users only) and `npm run staging:verify`.
 
+## Comparing staging with a snapshot
+
+`npm run staging:snapshot -- compare <label> [--tag ZZ-…] [--authorized-mfa <email>]` checks every pre-existing row by primary key and classifies every new row as synthetic or **unexpected** (rules: `scripts/staging/classify.mjs`). Synthetic tags and account ids are read from `.staging-state/synthetic-accounts-*.json` automatically. Auth logins and MFA factors are compared without reading secrets; a new factor on an existing account passes only with `--authorized-mfa`. Exit code 0 means every pre-existing row is unchanged and every addition is synthetic.
+
 ## Production deployment checklist (for later — needs explicit approval at each step)
 
 Do **not** start this until the staging results have been reviewed and approved.

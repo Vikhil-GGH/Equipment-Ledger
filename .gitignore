@@ -38,3 +38,6 @@ supabase/.temp
 
 # Staging test state (session tokens, reports) — never commit
 .staging-state/
+
+# Database CA certificates (docs/DATABASE_SSL.md) — chosen per environment
+certs/

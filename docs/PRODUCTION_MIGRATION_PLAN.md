@@ -1,6 +1,6 @@
-# Production migration plan (022–030) — draft, not approved
+# Production migration plan (021–030) — draft, not approved
 
-Nothing here has been run against production. Each step needs the owner's approval; stop at any STOP or unexpected result.
+Nothing here has been run against production. Each step needs the owner's approval; stop at any STOP or unexpected result. Findings, the per-migration compatibility checklist, proposals 031/032 and the decisions needed are in [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md).
 
 ## What the migrations do
 
@@ -21,11 +21,13 @@ Every migration has a rollback in `supabase/rollback/` (run in reverse order, on
 ## Before the change window
 
 1. **Read-only preflight** (run by the owner, from a trusted machine):
-   `PREFLIGHT_DB_URL='…production connection string…' node scripts/production/preflight.mjs`
-   It reports OK / INFO / STOP and never writes. Any STOP must be resolved first:
+   `PREFLIGHT_DB_URL='…production connection string…' PREFLIGHT_DB_SSL_CA=certs/supabase-prod-ca.crt node scripts/production/preflight.mjs`
+   It verifies the server certificate (see [DATABASE_SSL.md](DATABASE_SSL.md)), reports OK / INFO / STOP and never writes. Any STOP must be resolved first:
    - **021 not applied** → apply 021 with `supabase/adaptations/021_before_drop_changed_functions.sql` in the same transaction (it drops two functions whose return type 021 changes; nothing else depends on them).
    - **Bulk Stock items sharing a name + category** → decide which to keep (029 never merges); otherwise 029 fails safely.
    - **Employees sharing a work email** (only if 026 already exists) → resolve, otherwise 028 fails safely.
+   - **An object a pending migration drops by name is missing** → the database was hand-edited or renamed; find out why (the migration would fail).
+   - **Policies, API-callable SECURITY DEFINER functions or tables without RLS that no migration created** → review each; a hand-made permissive policy can re-open what 022/023/030 close.
 2. **Admin two-factor**: after 030, admin powers need a two-factor session. The admin can enrol on the Security page at any time (also before 030, once the new frontend is live).
 3. **Auth settings** (Supabase dashboard): anonymous sign-ins OFF; TOTP multi-factor enabled.
 4. **Full backup**: a database backup/PITR point, plus the app's Export backup (verified counts since 027).

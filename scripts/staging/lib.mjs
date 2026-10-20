@@ -4,7 +4,7 @@
 // REFUSES TO RUN if anything in it points at the production project named
 // in .env. There is deliberately no flag to override that check.
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -81,7 +81,7 @@ export function sslOptions(env) {
   // A database on this machine (e.g. `supabase start`) has no TLS.
   if (/@(localhost|127\.0\.0\.1)[:/]/.test(env.STAGING_DB_URL)) return false
   if (env.STAGING_DB_SSL_CA) {
-    const caPath = join(ROOT, env.STAGING_DB_SSL_CA)
+    const caPath = resolve(ROOT, env.STAGING_DB_SSL_CA) // relative to the repo, or absolute
     if (!existsSync(caPath)) fail(`STAGING_DB_SSL_CA file not found: ${caPath}`)
     return { ca: readFileSync(caPath, 'utf8'), rejectUnauthorized: true }
   }
