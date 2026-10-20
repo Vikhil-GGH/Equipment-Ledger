@@ -89,7 +89,7 @@ const tx = (fn: () => Promise<void>) => () => inRolledBackTx(db, fn)
 describe.skipIf(isStaging)('031: the effective-role policy is enforced everywhere', () => {
   it('each of the 8 functions differs from 030 by exactly the one role-read line, and none reads the raw role any more', async () => {
     const now = await defsOf(INLINE)
-    for (const f of INLINE) expect(now[f], f).toBe(defs030[f].replace(LINE, 'v_role := session_role(); -- 031: null for an admin without a two-factor session'))
+    for (const f of INLINE) expect(now[f], f).toBe(defs030[f].replace(LINE, 'select session_role() into v_role; -- 031: null for an admin without a two-factor session'))
     const readers = (await db.query<{ proname: string }>(`select p.proname from pg_proc p join pg_namespace s on s.oid = p.pronamespace
       where s.nspname = 'public' and p.prokind = 'f' and has_function_privilege('authenticated', p.oid, 'execute')
         and pg_get_functiondef(p.oid) ~* 'role[^;]*from\\s+(public\\.)?profiles' order by 1`)).rows.map((r) => r.proname)
@@ -129,7 +129,7 @@ describe.skipIf(isStaging)('031: an admin without a two-factor session', () => {
     const writes = [
       `select create_asset('monitors', 'Dell', 'Monitor', 'M31-NEW')`,
       `select perform_lifecycle_action('monitors', '${ids.monitor}', 'mark_damaged')`,
-      `select perform_swap('active_laptops_np', '${ids.npLaptop}', '${ids.spareInventoryLaptop}')`,
+      `select perform_swap('active_laptops_np', '${ids.npLaptop}', '${ids.spareInventoryLaptop}', 'test')`,
       `select perform_bulk_action('${ids.bulkItem}', 'receive_stock', 5)`,
       `select create_bulk_item('M31 Item', 'Cable', null, 3)`,
       `select commit_asset_import('monitors', 'm.xlsx', '[{"serial":"M31-IMP","name":"A","category":"B","status":"","assigned_to":"","location":""}]'::jsonb)`,
@@ -165,6 +165,29 @@ describe.skipIf(isStaging)('031: an admin without a two-factor session', () => {
     await rpc(db, `revoke_user_access($1)`, [EDITOR.id])
     await rpc(db, `restore_user_access($1)`, [EDITOR.id])
   }))
+})
+
+describe.skipIf(isStaging)('031: every rewritten function still works for the roles allowed to use it', () => {
+  // Regression: perform_bulk_action reads FOUND after an EXECUTE, which relied on the
+  // replaced line setting it. Each of the 8 functions must SUCCEED, not just refuse.
+  for (const [who, aal] of [[EDITOR, 'aal1'], [ADMIN, 'aal2']] as const) {
+    it(`${who.email} (${aal}): all 8 functions complete their normal work`, tx(async () => {
+      await actAs(db, who, { aal })
+      const mon = await rpc<string>(db, `create_asset('monitors', 'Dell', 'Monitor', 'M31-OK-${aal}')`)
+      await rpc(db, `perform_lifecycle_action('monitors', $1, 'mark_damaged')`, [mon])
+      await rpc(db, `perform_bulk_action($1, 'issue', 2)`, [ids.bulkItem])
+      await rpc(db, `perform_bulk_action($1, 'return', 1)`, [ids.bulkItem])
+      await rpc(db, `perform_bulk_action($1, 'mark_damaged', 1, 'available')`, [ids.bulkItem])
+      await rpc(db, `perform_bulk_action($1, 'repair', 1)`, [ids.bulkItem])
+      await rpc(db, `perform_bulk_action($1, 'receive_stock', 3)`, [ids.bulkItem])
+      expect(await one(`select available, provided, damaged from bulk_items where id = $1`, [ids.bulkItem])).toEqual({ available: 22, provided: 1, damaged: 0 })
+      expect(await rpc(db, `create_bulk_item($1, 'Cable', null, 3)`, [`M31 OK ${aal}`])).toBeTruthy()
+      expect(await rpc(db, `commit_asset_import('monitors', 'ok.xlsx', $1::jsonb)`, [JSON.stringify([{ serial: `M31-IMP-${aal}`, name: 'A', category: 'Monitor', status: '', assigned_to: '', location: '' }])])).toBeTruthy()
+      expect(await rpc(db, `commit_bulk_import('ok.xlsx', $1::jsonb)`, [JSON.stringify([{ name: `M31 Bulk ${aal}`, category: 'Cable', quantity: 2 }])])).toBeTruthy()
+      await rpc(db, `perform_swap('active_laptops_np', $1, $2, 'broken hinge')`, [ids.npLaptop, ids.spareInventoryLaptop])
+      await rpc(db, `onboarding_assign_device($1, $2, 'Dell Latitude 5440', 'Laptop')`, [ids.onboarding, `M31-ONB-${aal}`])
+    }))
+  }
 })
 
 describe.skipIf(isStaging)('031: editor, scanner and viewer permissions are unchanged', () => {

@@ -131,7 +131,7 @@ declare
   v_issues jsonb := '[]'::jsonb;
   v_laptops constant text[] := array['serialized_assets', 'active_laptops_np'];
 begin
-  v_role := session_role(); -- 031: null for an admin without a two-factor session
+  select session_role() into v_role; -- 031: null for an admin without a two-factor session
   if v_role is null or v_role not in ('admin', 'editor') then
     raise exception 'Not authorized to import';
   end if;
@@ -278,7 +278,7 @@ declare
   v_updated int := 0;
   v_unchanged int := 0;
 begin
-  v_role := session_role(); -- 031: null for an admin without a two-factor session
+  select session_role() into v_role; -- 031: null for an admin without a two-factor session
   if v_role is null or v_role not in ('admin', 'editor') then
     raise exception 'Not authorized to import';
   end if;
@@ -372,7 +372,7 @@ declare
   v_role user_role;
   v_id uuid;
 begin
-  v_role := session_role(); -- 031: null for an admin without a two-factor session
+  select session_role() into v_role; -- 031: null for an admin without a two-factor session
 
   if v_role is null or v_role = 'viewer' then
     raise exception 'Not authorized to add assets';
@@ -406,7 +406,7 @@ declare
   v_id uuid;
   v_qty integer := coalesce(p_initial_quantity, 0);
 begin
-  v_role := session_role(); -- 031: null for an admin without a two-factor session
+  select session_role() into v_role; -- 031: null for an admin without a two-factor session
   if v_role is null or v_role not in ('admin', 'editor') then
     raise exception 'Not authorized to add bulk stock items';
   end if;
@@ -444,7 +444,7 @@ declare
   v_status asset_status;
   v_row record;
 begin
-  v_role := session_role(); -- 031: null for an admin without a two-factor session
+  select session_role() into v_role; -- 031: null for an admin without a two-factor session
   if v_role is null or v_role not in ('admin', 'editor') then
     raise exception 'Not authorized';
   end if;
@@ -524,7 +524,7 @@ declare
   v_current integer;
   v_found boolean;
 begin
-  v_role := session_role(); -- 031: null for an admin without a two-factor session
+  select session_role() into v_role; -- 031: null for an admin without a two-factor session
   if v_role is null or v_role not in ('admin', 'editor') then
     raise exception 'Not authorized to modify bulk stock';
   end if;
@@ -607,7 +607,7 @@ declare
   v_moved_from_inventory boolean;
   v_row record;
 begin
-  v_role := session_role(); -- 031: null for an admin without a two-factor session
+  select session_role() into v_role; -- 031: null for an admin without a two-factor session
 
   if v_role is null then
     raise exception 'Not authorized';
@@ -749,7 +749,7 @@ declare
   v_new_in_inventory boolean := false;
   v_row record;
 begin
-  v_role := session_role(); -- 031: null for an admin without a two-factor session
+  select session_role() into v_role; -- 031: null for an admin without a two-factor session
   if v_role is null or v_role not in ('admin', 'editor') then
     raise exception 'Not authorized to perform a swap';
   end if;

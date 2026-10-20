@@ -11,7 +11,9 @@ import { PGlite } from '@electric-sql/pglite'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const INLINE_LINE = 'select role into v_role from profiles where id = v_actor;'
-const REPLACEMENT = 'v_role := session_role(); -- 031: null for an admin without a two-factor session'
+// SELECT … INTO (not :=) on purpose: like the line it replaces it sets FOUND,
+// which perform_bulk_action reads after an EXECUTE (EXECUTE doesn't set it).
+const REPLACEMENT = 'select session_role() into v_role; -- 031: null for an admin without a two-factor session'
 const INLINE_FUNCTIONS = ['commit_asset_import', 'commit_bulk_import', 'create_asset', 'create_bulk_item', 'onboarding_assign_device', 'perform_bulk_action', 'perform_lifecycle_action', 'perform_swap']
 
 const db = await PGlite.create()

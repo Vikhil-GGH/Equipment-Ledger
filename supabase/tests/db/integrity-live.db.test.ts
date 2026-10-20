@@ -11,7 +11,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { actAs, actAsDatabase, errorOf, inRolledBackTx, isStaging, openDb, tableHash, type Db } from './harness'
 import { ADMIN, EDITOR, backupTables, rpc, seedLedger, seedUsers } from './fixtures'
-import { createClient } from '@supabase/supabase-js'
+import { signInReader } from '../staging/reader'
 import type { PagedSource } from '../../../src/lib/fetchAllRows'
 import { exportBackup } from '../../../src/features/data/exportBackup'
 import { restorePayload, validateBackupFile } from '../../../src/features/data/backupFile'
@@ -128,11 +128,9 @@ describe.skipIf(!isStaging)('inventory integrity on the live staging database (r
   })
 
   it('the app paginated export through the real API is complete, and restoring that exact file round-trips the data (rolled back)', async () => {
-    // Read-only export, signed in as the staging admin, with the app's own code.
-    const opts = { auth: { persistSession: false, autoRefreshToken: false } }
-    const api = createClient(env.VITE_STAGING_SUPABASE_URL, env.VITE_STAGING_SUPABASE_ANON_KEY, opts)
-    const { error } = await api.auth.signInWithPassword({ email: env.STAGING_ADMIN_EMAIL, password: env.STAGING_ADMIN_PASSWORD })
-    if (error) throw error
+    // Read-only export with the app's own code, signed in as the synthetic reader (a
+    // password-only admin sees nothing since 031; reader.ts falls back to the admin before 031).
+    const { c: api } = await signInReader(env)
     const backup = await exportBackup(api as unknown as PagedSource)
     await api.auth.signOut()
 
