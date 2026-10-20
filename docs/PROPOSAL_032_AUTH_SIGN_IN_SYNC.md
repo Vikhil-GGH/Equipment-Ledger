@@ -3,7 +3,7 @@
 **Status:** for approval. Not applied anywhere. Files:
 - `supabase/proposals/032_auth_sign_in_sync.sql` + `032_down.sql`;
 - the Edge Function in `supabase/proposals/auth-sync/` (`sync.ts` logic, `index.ts` Deno entry);
-- tests in `supabase/tests/db/auth-sync.db.test.ts` (14).
+- tests in `supabase/tests/db/auth-sync.db.test.ts` (15).
 
 The earlier design wrote Supabase's Auth tables directly; it's withdrawn and deleted.
 
@@ -14,7 +14,7 @@ The earlier design wrote Supabase's Auth tables directly; it's withdrawn and del
 | Supported API, server-side credentials only | Bans and unbans go through the Auth Admin API (`auth.admin.updateUserById(id, { ban_duration })`) in an Edge Function. The service-role key is a Supabase function secret, never in the app, the repository or the browser. Nothing writes `auth.*` tables |
 | Revoke database access immediately, independently of Auth | Remove / Restore access are unchanged from 030. Data access changes in the database transaction itself; the Auth step happens afterwards, outside it |
 | Record and audit sync failures | `auth_sync_state` (one row per account: status, attempts, last error, whether the current ban is ours) and append-only `auth_sync_events` (requested, blocked, unblocked, already, not ours, failed with the error, superseded, reconciled, retry requested, with who caused it) |
-| Safe, idempotent retries | Each run recomputes what the account **should** be from `profiles` (the source of truth), never from a queued instruction. Running twice changes nothing. Failed accounts back off 2, 4, 8 … up to 60 minutes. Rows are claimed with `for update skip locked`, so two runs never handle the same account |
+| Safe, idempotent retries | Each run recomputes what the account **should** be from `profiles` (the source of truth), never from a queued instruction. Running twice changes nothing. Failed accounts back off 2, 4, 8 … up to 60 minutes. A claim takes a 5-minute lease, so two runs never handle the same account, and a crashed run's accounts are picked up when its lease expires |
 | Reconciliation | Every run first queues any account whose Auth state could disagree with its access state, and re-checks every revoked account daily. A ban lifted in the dashboard, or an unrelated ban that expired, gets re-applied |
 | Never remove an unrelated ban | The sync lifts a ban only if **it** applied it **and** the ban's end time is still exactly what it set. A ban that already existed, or one changed in the dashboard after the sync set it, is left alone and recorded as *not ours* |
 | A ban or unban failure can't grant data access | The sync functions never write `profiles`. Data access is decided by `profiles` alone (030/031). Tested: under success and every failure, `profiles`, the access history and business tables are byte-identical. A failed **unban** fails closed (sign-in stays blocked until the retry) |
@@ -40,6 +40,19 @@ Edge Function: authorize caller → auth_sync_reconcile() → auth_sync_claim(25
 
 Everything else gets 401/403. The database functions the sync uses are executable by `service_role` only. Admins with two-factor can read the state and the events, and can request a retry (`request_auth_sync_retry`); nobody can write them directly.
 
+## Scheduled worker (proposed)
+
+| Concern | Design |
+|---|---|
+| Trigger | **Supabase Cron** (`pg_cron`) every 15 minutes calls the function with `pg_net` (`POST …/functions/v1/auth-sync`, header `x-auth-sync-secret`). The secret is kept in **Supabase Vault** and read by the cron job; it's never in the repository. The app also calls the function right after Remove/Restore, so the schedule is the safety net, not the main path |
+| Trust | Only the scheduler secret (≥ 32 random characters, constant-time compare) or an admin's own two-factor token is accepted. The service-role key exists only as a function secret |
+| Concurrency | A claim gives each account a **5-minute lease** (`in_progress`) under `for update skip locked`, so overlapping runs never handle the same account. If a worker crashes, its lease expires and another worker takes over. Tested with two workers and a crash |
+| Retries | Failures back off 2, 4, 8 … up to 60 minutes and keep retrying. Every attempt is counted and its error recorded |
+| Reconciliation | Every run first queues any account whose sign-in state could disagree with its access state, and re-checks revoked accounts daily |
+| Audit | `auth_sync_events`: append-only, with who caused each change; readable by admins with two-factor |
+| Monitoring | Access & Roles shows accounts in *failed* or *not ours*. The smoke check fails if any account has been *failed* for more than an hour |
+| Token lifetime | **Unchanged** (Supabase default) until the staging results; then revisited |
+
 ## What a ban does in Supabase Auth (to verify on staging, step B in the plan)
 
 | | Expected | How it will be verified |
@@ -58,7 +71,7 @@ Everything else gets 401/403. The database functions the sync uses are executabl
 
 1. **Edge Functions:** deploy `auth-sync` with `supabase functions deploy auth-sync` on approval, with secrets `AUTH_SYNC_CRON_SECRET` and `SUPABASE_ANON_KEY`. Supabase provides the URL and the service key.
 2. **Scheduler:** recommended is Supabase Cron (`pg_cron` + `pg_net`) calling the function every 15 minutes, with the secret stored in Supabase Vault. The alternative is an external scheduler.
-3. **JWT expiry:** consider lowering it from 1 hour to 15 minutes. Already-open sessions then end sooner, at a small cost in refreshes.
+3. **JWT expiry:** unchanged for now (as decided). Revisit after the staging results.
 
 ## Rollback
 

@@ -217,6 +217,22 @@ describe.skipIf(isStaging)('032: races and reconciliation', () => {
     expect((await runSync(syncDb, auth.api)).results[0].result).toBe('unblocked') // the ban it applied is lifted
   }))
 
+  it("two workers at once never sync the same account; a crashed worker's lease expires and the account is picked up again", tx(async () => {
+    await revoke(EDITOR.id)
+    await revoke(VIEWER.id)
+    const a = await syncDb.claim(10)
+    const b = await syncDb.claim(10) // a second worker, while the first still holds the lease
+    expect(a.map((x) => x.user_id).sort()).toEqual([EDITOR.id, VIEWER.id].sort())
+    expect(b).toEqual([])
+    expect(await syncDb.reconcile()).toBe(0) // in_progress accounts are not re-queued either
+    // The first worker crashes without reporting; after the lease, another worker takes over.
+    await db.query(`update auth_sync_state set lease_until = now() - interval '1 second'`)
+    const auth = fakeAuth()
+    const out = await runSync(syncDb, auth.api)
+    expect(out.results.map((r) => r.result)).toEqual(['blocked', 'blocked'])
+    expect(await state(EDITOR.id)).toMatchObject({ status: 'synced', attempts: 2 })
+  }))
+
   it('reconciliation catches a revoked account with no sync record (e.g. revoked before 032) and a ban lifted in the dashboard', tx(async () => {
     const auth = fakeAuth()
     await revoke(EDITOR.id)

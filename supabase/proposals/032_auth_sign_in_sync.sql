@@ -29,7 +29,8 @@
 
 create table auth_sync_state (
   user_id uuid primary key references profiles (id),
-  status text not null default 'pending' check (status in ('pending', 'synced', 'failed', 'not_ours')),
+  status text not null default 'pending' check (status in ('pending', 'in_progress', 'synced', 'failed', 'not_ours')),
+  lease_until timestamptz,                        -- in_progress: claimed by a worker until then
   ban_owned boolean not null default false,       -- a ban this sync applied and may lift
   ban_until_set timestamptz,                      -- exactly what it set (lift only if unchanged)
   attempts int not null default 0,
@@ -110,7 +111,7 @@ begin
   for r in
     select p.id, auth_sync_desired(p.id) as desired
     from profiles p left join auth_sync_state s on s.user_id = p.id
-    where coalesce(s.status, '') not in ('pending', 'failed') -- failed: retried by auth_sync_claim's backoff
+    where coalesce(s.status, '') not in ('pending', 'failed', 'in_progress') -- failed / in_progress: handled by auth_sync_claim
       and ((p.access_revoked_at is not null and (s.user_id is null or s.status not in ('synced', 'not_ours') or s.synced_state is distinct from 'blocked'
                                                   or s.synced_at < clock_timestamp() - interval '1 day'))
         or (p.access_revoked_at is null and s.ban_owned))
@@ -124,9 +125,11 @@ begin
 end;
 $$;
 
--- Claim up to p_limit accounts to sync now: pending ones, and failed ones
--- whose backoff (2^attempts minutes, at most 60) has passed. Locked, so two
--- workers never sync the same account at once.
+-- Claim up to p_limit accounts to sync now: pending ones, failed ones whose
+-- backoff (2^attempts minutes, at most 60) has passed, and in_progress ones
+-- whose worker's lease expired (it crashed). A claim takes a 5-minute lease
+-- (status in_progress), so two workers never sync the same account at once —
+-- the row lock alone would end when this call's transaction commits.
 create function auth_sync_claim(p_limit int default 25)
 returns table (user_id uuid, desired text, ban_owned boolean, ban_until_set timestamptz, attempts int)
 language sql
@@ -137,11 +140,13 @@ as $$
     select s.user_id from auth_sync_state s
     where s.status = 'pending'
        or (s.status = 'failed' and s.last_attempt_at < clock_timestamp() - least(power(2, s.attempts), 60) * interval '1 minute')
+       or (s.status = 'in_progress' and s.lease_until < clock_timestamp())
     order by s.requested_at
     limit p_limit
     for update skip locked
   )
-  update auth_sync_state s set last_attempt_at = clock_timestamp(), attempts = s.attempts + 1
+  update auth_sync_state s set status = 'in_progress', lease_until = clock_timestamp() + interval '5 minutes',
+         last_attempt_at = clock_timestamp(), attempts = s.attempts + 1
   from c where s.user_id = c.user_id
   returning s.user_id, auth_sync_desired(s.user_id), s.ban_owned, s.ban_until_set, s.attempts;
 $$;
@@ -172,6 +177,7 @@ begin
   insert into auth_sync_events (user_id, kind, desired, error, attempt, detail)
   values (p_user_id, p_result, p_desired, p_error, v_attempt,
           case when p_result = 'not_ours' then 'an existing ban not applied by this sync — left as it is' end);
+  update auth_sync_state set lease_until = null where user_id = p_user_id;
   if auth_sync_desired(p_user_id) is distinct from p_desired then
     update auth_sync_state set status = 'pending', last_error = null where user_id = p_user_id;
     insert into auth_sync_events (user_id, kind, desired, detail) values (p_user_id, 'superseded', auth_sync_desired(p_user_id), 'access changed during the sync — queued again');
