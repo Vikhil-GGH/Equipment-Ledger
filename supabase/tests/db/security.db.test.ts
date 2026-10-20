@@ -103,6 +103,9 @@ beforeAll(async () => {
   await loadSupabaseStub(db)
   for (const file of migrationFiles()) {
     if (SECURITY_MIGRATIONS.includes(file)) continue
+    // 030 builds on 022 (is_anonymous_session) and has its own suite
+    // (access.db.test.ts); this one tests 022/023 against what precedes them.
+    if (file >= '20260901000030') continue
     if (file.startsWith('20260901000021')) {
       try {
         await applyMigration(db, file)

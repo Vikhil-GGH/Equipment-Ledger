@@ -106,13 +106,33 @@ function NavGroups({ groups, onNavigate }: { groups: NavGroup[]; onNavigate?: ()
   )
 }
 
+/** Admin powers need a two-factor session (20260901000030). */
+function AdminMfaBanner() {
+  const { role, aal } = useAuth()
+  if (role !== 'admin' || !aal || aal.current === 'aal2') return null
+  return (
+    <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
+      Admin actions (roles, access, restores) need two-factor authentication.{' '}
+      <NavLink to="/account/security" className="font-medium underline">
+        {aal.next === 'aal2' ? 'Verify this session' : 'Set it up'}
+      </NavLink>
+    </div>
+  )
+}
+
 function SidebarFooter() {
-  const { profile, signOut } = useAuth()
+  const { profile, signOut, aal } = useAuth()
   return (
     <div className="border-t border-white/10 px-3 py-3">
       <p className="truncate text-xs text-neutral-300">{profile?.email}</p>
       <div className="mt-1 flex items-center justify-between">
-        <span className="text-xs text-neutral-500">{profile?.role}</span>
+        <span className="text-xs text-neutral-500">
+          {profile?.role}
+          {aal?.current === 'aal2' && <span title="Signed in with two-factor authentication"> · 2FA</span>}
+        </span>
+        <NavLink to="/account/security" className="text-xs font-medium text-neutral-400 hover:text-neutral-100">
+          Security
+        </NavLink>
         <button
           onClick={() => void signOut()}
           className="text-xs font-medium text-neutral-400 hover:text-neutral-100"
@@ -167,7 +187,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </Drawer>
 
-        <main className="flex-1 p-4 pb-24 sm:pb-4">{children}</main>
+        <main className="flex-1 p-4 pb-24 sm:pb-4">
+          <AdminMfaBanner />
+          {children}
+        </main>
 
         {location.pathname !== '/scan' && (
           <Link

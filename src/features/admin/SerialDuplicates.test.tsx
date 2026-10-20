@@ -13,6 +13,7 @@ vi.mock('./api', () => ({
   useUsersList: () => ({ data: [], isLoading: false, error: null }),
   useUpdateUserRole: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useRemoveUser: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRestoreUser: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useSerialDuplicates: vi.fn(),
 }))
 

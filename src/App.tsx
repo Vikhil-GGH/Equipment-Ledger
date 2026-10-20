@@ -14,6 +14,7 @@ import { OnboardingListPage } from './features/onboarding/OnboardingListPage'
 import { OnboardingDetailPage } from './features/onboarding/OnboardingDetailPage'
 import { OffboardingListPage } from './features/offboarding/OffboardingListPage'
 import { ActiveEmployeesPage } from './features/employees/ActiveEmployeesPage'
+import { SecurityPage } from './features/auth/SecurityPage'
 import { OffboardingTrackPage } from './features/offboarding/OffboardingTrackPage'
 import { AdminPage } from './features/admin/AdminPage'
 import { ImportHistoryPage } from './features/import/ImportHistoryPage'
@@ -103,6 +104,7 @@ export function App() {
                 <Route path="/offboarding" element={<OffboardingListPage />} />
                 <Route path="/offboarding/:id" element={<OffboardingTrackPage />} />
                 <Route path="/employees" element={<ActiveEmployeesPage />} />
+                <Route path="/account/security" element={<SecurityPage />} />
                 <Route
                   path="/admin"
                   element={

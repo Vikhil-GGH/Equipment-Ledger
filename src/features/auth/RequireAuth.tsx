@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './useAuth'
+import { MfaChallenge } from './MfaChallenge'
 
 export function RequireAuth({ children }: { children: ReactNode }) {
-  const { session, profile, loading } = useAuth()
+  const { session, profile, loading, aal } = useAuth()
   const location = useLocation()
 
   if (loading) {
@@ -12,6 +13,11 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
   if (!session) {
     return <Navigate to="/login" state={{ from: location }} replace />
+  }
+
+  // The account has two-factor set up: the code is needed before anything else.
+  if (aal?.next === 'aal2' && aal.current !== 'aal2') {
+    return <MfaChallenge />
   }
 
   if (!profile) {

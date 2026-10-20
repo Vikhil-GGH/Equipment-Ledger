@@ -146,8 +146,13 @@ export interface TestUser {
 }
 
 /** Switch the current transaction to act as an authenticated API request. */
-export async function actAs(db: Db, user: TestUser, opts: { omitAnonymousClaim?: boolean } = {}) {
-  const claims: Record<string, unknown> = { sub: user.id, role: 'authenticated', aal: 'aal1' }
+/**
+ * aal: the session's assurance level. Defaults to 'aal2' (signed in with
+ * two-factor authentication), which admin powers require since
+ * 20260901000030; pass 'aal1' to test a password-only session.
+ */
+export async function actAs(db: Db, user: TestUser, opts: { omitAnonymousClaim?: boolean; aal?: 'aal1' | 'aal2' } = {}) {
+  const claims: Record<string, unknown> = { sub: user.id, role: 'authenticated', aal: opts.aal ?? 'aal2' }
   if (!opts.omitAnonymousClaim) claims.is_anonymous = user.anonymous
   await db.query(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify(claims)])
   await db.exec('set local role authenticated')

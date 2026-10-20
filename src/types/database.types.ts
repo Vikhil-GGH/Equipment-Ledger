@@ -888,6 +888,14 @@ export interface Database {
         }
         Returns: Json
       }
+      revoke_user_access: {
+        Args: { [key: string]: unknown; p_user_id: string; p_reason?: string | null }
+        Returns: undefined
+      }
+      restore_user_access: {
+        Args: { [key: string]: unknown; p_user_id: string; p_reason?: string | null }
+        Returns: undefined
+      }
       save_employee: {
         Args: { [key: string]: unknown; p_employee_id: string | null; p_fields: Json; p_status?: EmploymentStatus | null }
         Returns: string

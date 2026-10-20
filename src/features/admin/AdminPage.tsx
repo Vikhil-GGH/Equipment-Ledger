@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { getErrorMessage } from '../../lib/errors'
 import type { UserRole } from '../../types/database.types'
 import { useAuth } from '../auth/useAuth'
-import { useRemoveUser, useSerialDuplicates, useUpdateUserRole, useUsersList, type ProfileRow } from './api'
+import { useRemoveUser, useRestoreUser, useSerialDuplicates, useUpdateUserRole, useUsersList, type ProfileRow } from './api'
 import { usePossibleDuplicates, useRegisterAvailable } from '../register/api'
 
 const ROLES: UserRole[] = ['admin', 'editor', 'viewer', 'scanner']
@@ -118,8 +118,11 @@ function SerialDuplicates() {
 function UserRow({ row, isSelf }: { row: ProfileRow; isSelf: boolean }) {
   const updateRole = useUpdateUserRole()
   const removeUser = useRemoveUser()
+  const restoreUser = useRestoreUser()
   const [confirmingRemove, setConfirmingRemove] = useState(false)
+  const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const revoked = !!row.access_revoked_at
 
   async function handleRoleChange(role: UserRole) {
     setError(null)
@@ -134,10 +137,22 @@ function UserRow({ row, isSelf }: { row: ProfileRow; isSelf: boolean }) {
   async function handleRemove() {
     setError(null)
     try {
-      await removeUser.mutateAsync(row.id)
+      await removeUser.mutateAsync({ userId: row.id, reason })
+      setConfirmingRemove(false)
+      setReason('')
     } catch (err) {
-      console.error('remove user failed:', err)
-      setError(getErrorMessage(err, 'Failed to remove user'))
+      console.error('remove access failed:', err)
+      setError(getErrorMessage(err, 'Failed to remove access'))
+    }
+  }
+
+  async function handleRestore() {
+    setError(null)
+    try {
+      await restoreUser.mutateAsync({ userId: row.id })
+    } catch (err) {
+      console.error('restore access failed:', err)
+      setError(getErrorMessage(err, 'Failed to restore access'))
     }
   }
 
@@ -149,12 +164,19 @@ function UserRow({ row, isSelf }: { row: ProfileRow; isSelf: boolean }) {
           {isSelf && <span className="ml-2 text-xs text-neutral-400">(you)</span>}
         </p>
         <p className="text-xs text-neutral-500">{row.email}</p>
+        {revoked && (
+          <p className="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+            Access removed {new Date(row.access_revoked_at!).toLocaleDateString()}
+            {row.role_before_revoke ? ` — was ${row.role_before_revoke}` : ''}. Their history is kept.
+          </p>
+        )}
       </div>
 
       <div className="flex items-center gap-2">
         <select
           value={row.role}
-          disabled={isSelf || updateRole.isPending}
+          disabled={isSelf || revoked || updateRole.isPending}
+          aria-label={`Role for ${row.email}`}
           onChange={(e) => void handleRoleChange(e.target.value as UserRole)}
           className="input w-auto"
         >
@@ -165,8 +187,19 @@ function UserRow({ row, isSelf }: { row: ProfileRow; isSelf: boolean }) {
           ))}
         </select>
 
-        {confirmingRemove ? (
+        {revoked ? (
+          <button className="btn-secondary text-xs" disabled={restoreUser.isPending} onClick={() => void handleRestore()}>
+            {restoreUser.isPending ? 'Restoring…' : 'Restore access'}
+          </button>
+        ) : confirmingRemove ? (
           <div className="flex items-center gap-1">
+            <input
+              className="input w-40 py-1 text-xs"
+              placeholder="Reason (optional)"
+              aria-label="Reason for removing access"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
             <button
               className="rounded-md bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
               disabled={removeUser.isPending}

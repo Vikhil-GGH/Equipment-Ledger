@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import type { Session, User } from '@supabase/supabase-js'
 import { supabase } from '../../lib/supabase'
 import type { UserRole } from '../../types/database.types'
-import { AuthContext, type Profile } from './auth-context'
+import { AuthContext, type Assurance, type Profile } from './auth-context'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
@@ -10,6 +10,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false)
+  const [aal, setAal] = useState<Assurance | null>(null)
+
+  // Admin powers need a two-factor session (20260901000030); the app asks
+  // for the code when the account has a verified authenticator.
+  const refreshAal = useCallback(async () => {
+    try {
+      const mfa = supabase.auth.mfa
+      if (!mfa?.getAuthenticatorAssuranceLevel) return setAal(null)
+      const { data, error } = await mfa.getAuthenticatorAssuranceLevel()
+      if (error || !data) return setAal(null)
+      const level = (l: unknown) => (l === 'aal2' ? 'aal2' : l === 'aal1' ? 'aal1' : null)
+      setAal({ current: level(data.currentLevel), next: level(data.nextLevel) })
+    } catch {
+      setAal(null)
+    }
+  }, [])
 
   const loadProfile = useCallback(async (userId: string) => {
     const { data, error } = await supabase
@@ -40,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session)
       setUser(session?.user ?? null)
       if (session?.user) {
-        await loadProfile(session.user.id)
+        await Promise.all([loadProfile(session.user.id), refreshAal()])
       }
       setLoading(false)
     })
@@ -56,9 +72,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(newSession)
         setUser(newSession?.user ?? null)
         if (newSession?.user) {
-          await loadProfile(newSession.user.id)
+          await Promise.all([loadProfile(newSession.user.id), refreshAal()])
         } else {
           setProfile(null)
+          setAal(null)
         }
       },
     )
@@ -67,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true
       listener.subscription.unsubscribe()
     }
-  }, [loadProfile])
+  }, [loadProfile, refreshAal])
 
   const signIn = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
@@ -94,8 +111,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearPasswordRecovery,
       signIn,
       signOut,
+      aal,
+      refreshAal,
     }),
-    [session, user, profile, role, loading, isPasswordRecovery, clearPasswordRecovery, signIn, signOut],
+    [session, user, profile, role, loading, isPasswordRecovery, clearPasswordRecovery, signIn, signOut, aal, refreshAal],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -9,6 +9,13 @@ export interface Profile {
   role: UserRole
 }
 
+/** Authenticator assurance level of the session: aal1 = password, aal2 = two-factor verified. */
+export interface Assurance {
+  current: 'aal1' | 'aal2' | null
+  /** 'aal2' when the account has a verified two-factor method (so it must be used). */
+  next: 'aal1' | 'aal2' | null
+}
+
 export interface AuthContextValue {
   session: Session | null
   user: User | null
@@ -26,6 +33,9 @@ export interface AuthContextValue {
   clearPasswordRecovery: () => void
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
+  /** null until known (or if two-factor isn't available). */
+  aal: Assurance | null
+  refreshAal: () => Promise<void>
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null)

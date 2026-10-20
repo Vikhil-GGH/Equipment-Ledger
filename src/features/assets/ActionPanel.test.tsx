@@ -31,6 +31,8 @@ function mockRole(role: UserRole) {
     clearPasswordRecovery: vi.fn(),
     signIn: vi.fn(),
     signOut: vi.fn(),
+    aal: null,
+    refreshAal: vi.fn(),
   })
 }
 
