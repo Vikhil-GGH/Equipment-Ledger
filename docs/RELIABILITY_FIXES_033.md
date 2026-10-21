@@ -13,12 +13,13 @@ Found by the 2026-10-21 browser checks on staging (which is on 030). One small m
 | 3 | Assignee names were stored as typed (`"  zz   IMPORTBETA "`) | Nothing tidied `devices.assigned_to` | A `BEFORE INSERT/UPDATE OF assigned_to` trigger on the four device tables trims, collapses spaces, and uses the employee's recorded name when exactly one employee matches. Only values being inserted or changed are touched; employee ids and register history are not |
 | 4 | Assigning a device to a name shared by two employees recorded no link, silently | `sync_equipment_register` stored `employee_ambiguous = true` with no employee | It now refuses, saying what to do (issue from the employee's Onboarding page, which names the employee, or make the names different). Old unlinked rows are left as they are |
 | 5 | The issue picker offered Retained and Decommissioned laptops | The query allowed the statuses the device-page "Provide" allows | Picker lists **Available only** (laptops and headsets); `issue_equipment` also refuses a device that isn't Available. The device-page Provide rules are unchanged |
-| 6 | Two in-progress offboarding checklists for one employee; the Excel export counted the employee's pending items twice (13 vs the dashboard's 10) | Nothing prevented the duplicate; the export attached the employee's equipment to every record | A `BEFORE INSERT / UPDATE OF employee_id` trigger refuses a second **in-progress** checklist for the same employee (or the same unlinked name). Completed ones never block, existing duplicates are untouched. The export counts an employee's equipment once, on their newest record |
+| 6 | Two in-progress offboarding checklists for one employee; the Excel export counted the employee's pending items twice (13 vs the dashboard's 10) | Nothing prevented the duplicate; the export attached the employee's equipment to every record | A `BEFORE INSERT / UPDATE OF employee_id` trigger refuses a second **in-progress** checklist for the same person. It first takes transaction-scoped advisory locks (employee id, the employee record's name, the typed name, always in ascending key order so sessions can't deadlock), then checks, so two simultaneous requests can't both pass: the second waits, then is rejected after the first commits or proceeds after it rolls back. Linked and unlinked records for the same person can't slip past each other. Completed ones never block, existing duplicates are untouched. The export counts an employee's equipment once, on their newest record |
+| 6b | Device-page Provide of a set-aside (Retained / Decommissioned) device | It only checked the status | `perform_lifecycle_action` (replaced, otherwise identical to 030, history unchanged) now also requires the device to be unassigned (so not under an authorized retention) and to have no open register issue (so never a second open issue). The register path stays Available-only |
 | 7 | Add employee form accepted a second person with the same name without a word | The Excel import had a duplicate check; the form did not | The form uses the **same finder** as the Excel preview (`duplicateFinder`), shows who may be the same person and why, and asks. Nothing is merged. "Leave of Absence" is still flagged for review, never mapped |
 
 ## Database objects
 
-Replaced (`create or replace`, same signatures, grants unchanged): `perform_bulk_action`, `sync_equipment_register`, `issue_equipment`, view `equipment_register_mismatches`.
+Replaced (`create or replace`, same signatures, grants unchanged): `perform_bulk_action`, `sync_equipment_register`, `issue_equipment`, `perform_lifecycle_action`, view `equipment_register_mismatches`.
 Added: functions `canonical_assignee(text)`, `normalize_device_assignee()`, `prevent_duplicate_offboarding()` (execute revoked from everyone but the owner); triggers `serialized_assets_normalize_assignee`, `active_laptops_np_normalize_assignee`, `monitors_normalize_assignee`, `other_equipment_normalize_assignee`, `offboarding_one_in_progress`.
 No table, column, row, policy or grant changes.
 
@@ -38,7 +39,7 @@ On staging today: 27 assigned devices, none with untidy text (so rule 3 rewrites
 
 ## Tests
 
-`reliability.db.test.ts` (21), `bulk-stock.db.test.ts` (17), the rehearsal (6, opt-in with `REHEARSAL_SNAPSHOT=<label>`), `issuableDevices.test.tsx`, `EmployeeModal.test.tsx`, and an export test for the dashboard agreement. Each fix's test fails without the fix.
+`reliability.db.test.ts` (32), `bulk-stock.db.test.ts` (17), the rehearsal (6, opt-in with `REHEARSAL_SNAPSHOT=<label>`), `offboarding-race-live.db.test.ts` (two real connections, hosted staging only, opt-in with `RACE_TEST=1`), `issuableDevices.test.tsx`, `EmployeeModal.test.tsx`, and an export test for the dashboard agreement. Each fix's test fails without the fix.
 
 ## Hosted staging: what needs approval
 

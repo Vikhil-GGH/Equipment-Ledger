@@ -353,6 +353,143 @@ describe.skipIf(isStaging)('6. One in-progress offboarding per employee', () => 
   })
 })
 
+describe.skipIf(isStaging)('6b. Offboarding: a person cannot slip past the guard by being named differently', () => {
+  const start = (name: string, employee: string | null) =>
+    db.query(`insert into offboarding_checklists (employee_name, employee_id, created_by) values ($1, $2, $3) returning id`, [name, employee, ADMIN.id])
+  const startErr = (name: string, employee: string | null) =>
+    errorOf(db, `insert into offboarding_checklists (employee_name, employee_id, created_by) values ($1, $2, $3)`, [name, employee, ADMIN.id])
+  const locks = async () => (await one(`select count(*)::int as n from pg_locks where locktype = 'advisory'`)).n
+
+  it('linked first, then an unlinked record typed with the employee record\'s name: refused', async () => {
+    await inRolledBackTx(db, async () => {
+      const s = await scene('Q1')
+      await start('a nickname', s.emp) // linked; typed name differs from the record's "Zz Q1 Person"
+      expect(await startErr('  ZZ q1   PERSON', null)).toMatch(/already in progress/)
+    })
+  })
+
+  it('unlinked first, then a linked record whose employee record carries that name: refused', async () => {
+    await inRolledBackTx(db, async () => {
+      const s = await scene('Q2')
+      await start('Zz Q2 Person', null)
+      expect(await startErr('another nickname', s.emp)).toMatch(/already in progress/)
+    })
+  })
+
+  it('two linked records for one employee with different typed names: refused', async () => {
+    await inRolledBackTx(db, async () => {
+      const s = await scene('Q3')
+      await start('first label', s.emp)
+      expect(await startErr('second label', s.emp)).toMatch(/already in progress/)
+    })
+  })
+
+  it('linking an existing unlinked record to an employee who already has one in progress: refused', async () => {
+    await inRolledBackTx(db, async () => {
+      const s = await scene('Q4')
+      await start('Zz Q4 Person', null)
+      const other = (await start('Totally Different Label', null)).rows[0].id as string
+      expect(await errorOf(db, `update offboarding_checklists set employee_id = $2 where id = $1`, [other, s.emp])).toMatch(/already in progress/)
+    })
+  })
+
+  it('the guard takes advisory locks first (employee id, record name, typed name), and only for the identities involved', async () => {
+    await inRolledBackTx(db, async () => {
+      const s = await scene('Q5')
+      const base = await locks()
+      await start('Zz Q5 Person', null) // unlinked: one name lock
+      expect(await locks()).toBe(base + 1)
+      const o = await rpc<string>(db, `create_employee('Zz Q5 Other')`)
+      await start('a label', o) // linked: employee id + record name + typed name
+      expect(await locks()).toBe(base + 4)
+      void s
+    })
+  })
+
+  it('different employees are independent, completed history never blocks, and rows already there are not touched', async () => {
+    await inRolledBackTx(db, async () => {
+      const a = await scene('Q6')
+      const b = await rpc<string>(db, `create_employee('Zz Q6 Second')`)
+      const first = (await start('Zz Q6 Person', a.emp)).rows[0].id as string
+      await start('Zz Q6 Second', b)
+      await db.query(`update offboarding_checklists set removed_access = true, laptop_outcome = 'received' where id = $1`, [first])
+      const before = await one(`select * from offboarding_checklists where id = $1`, [first])
+      await start('Zz Q6 Person', a.emp) // a new offboarding after a completed one
+      expect(await one(`select * from offboarding_checklists where id = $1`, [first])).toEqual(before)
+    })
+  })
+})
+
+describe.skipIf(isStaging)('7. Device-page Provide of a set-aside device', () => {
+  const setAside = async (tag: string, action: 'retain' | 'decommission' = 'retain') => {
+    const s = await scene(tag)
+    await rpc(db, `perform_lifecycle_action('serialized_assets', $1, 'retain')`, [s.laptop])
+    if (action === 'decommission') {
+      await actAsDatabase(db)
+      await db.query(`update serialized_assets set status = 'decommissioned' where id = $1`, [s.laptop])
+      await actAs(db, ADMIN)
+    }
+    return s
+  }
+
+  it('an unassigned set-aside device (Retained or Decommissioned) can still be provided; one open row; history kept', async () => {
+    await inRolledBackTx(db, async () => {
+      for (const kind of ['retain', 'decommission'] as const) {
+        const s = await setAside('P' + kind.slice(0, 3), kind)
+        await rpc(db, `perform_lifecycle_action('serialized_assets', $1, 'provide', 'Zz P${kind.slice(0, 3)} Person')`, [s.laptop])
+        expect(await device(s.laptop), kind).toMatchObject({ tbl: 'active_laptops_np', status: 'provided', assigned_to: 'Zz P' + kind.slice(0, 3) + ' Person' })
+        expect((await one(`select count(*)::int as n from equipment_issues where asset_id = $1 and status = 'open'`, [s.laptop])).n, kind).toBe(1)
+        const actions = (await all(`select action from active_laptops_np_history where asset_id = $1`, [s.laptop])).map((h) => h.action)
+        expect(actions, kind).toEqual(expect.arrayContaining(['created', 'retain', 'provide'])) // the set-aside step is still in the history
+      }
+    })
+  })
+
+  it('a set-aside device that is still assigned (an authorized retention) is refused and left alone', async () => {
+    await inRolledBackTx(db, async () => {
+      const s = await setAside('P2')
+      await quiet(async () => {
+        await db.query(`update serialized_assets set assigned_to = 'Zz Keeper' where id = $1`, [s.laptop])
+      })
+      const msg = await errorOf(db, `select perform_lifecycle_action('serialized_assets', $1, 'provide', 'Zz Someone Else')`, [s.laptop])
+      expect(msg).toMatch(/still assigned to Zz Keeper/)
+      expect(await device(s.laptop)).toMatchObject({ tbl: 'serialized_assets', status: 'retained', assigned_to: 'Zz Keeper' })
+    })
+  })
+
+  it('a set-aside device that already has an open register issue is refused: never a second open issue', async () => {
+    await inRolledBackTx(db, async () => {
+      const s = await setAside('P3')
+      await quiet(async () => {
+        await db.query(
+          `insert into equipment_issues (employee_id, assignee_name, item_kind, asset_collection, asset_id, description, serial, source)
+           values (null, 'Zz Stray', 'serialized', 'serialized_assets', $1, 'Dell', 'P3-LAP-1', 'lifecycle')`, [s.laptop])
+      })
+      expect(await errorOf(db, `select perform_lifecycle_action('serialized_assets', $1, 'provide', 'Zz Someone Else')`, [s.laptop])).toMatch(/open issue in the equipment register/)
+      expect((await one(`select count(*)::int as n from equipment_issues where asset_id = $1 and status = 'open'`, [s.laptop])).n).toBe(1)
+    })
+  })
+
+  it('a laptop under authorized retention (Provided, kept by its employee) offers no Provide at all', async () => {
+    await inRolledBackTx(db, async () => {
+      const s = await scene('P4')
+      const issue = await rpc<string>(db, `issue_equipment($1, 'serialized_assets', $2)`, [s.emp, s.laptop])
+      await rpc(db, `return_equipment($1, 'retained_authorized', null, 'approved')`, [issue])
+      expect(await errorOf(db, `select perform_lifecycle_action('active_laptops_np', $1, 'provide', 'Zz Someone Else')`, [s.laptop])).toMatch(/not allowed from status provided/)
+    })
+  })
+
+  it('the register path stays Available-only, and an Available device is provided exactly as before', async () => {
+    await inRolledBackTx(db, async () => {
+      const s = await setAside('P5')
+      expect(await errorOf(db, `select issue_equipment($1, 'serialized_assets', $2)`, [s.emp, s.laptop])).toMatch(/Only an Available device can be issued/)
+      const fresh = await rpc<string>(db, `create_asset('serialized_assets', 'Dell', 'Laptop', 'P5-LAP-2')`)
+      await rpc(db, `perform_lifecycle_action('serialized_assets', $1, 'provide', 'Zz P5 Person')`, [fresh])
+      expect(await device(fresh)).toMatchObject({ status: 'provided', assigned_to: 'Zz P5 Person' })
+    })
+  })
+})
+
 describe.skipIf(isStaging)('Compatibility and rollback of 033', () => {
   let old: Db
   const tables = async (d: Db) => {

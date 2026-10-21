@@ -225,6 +225,144 @@ begin
 end;
 $function$;
 
+CREATE OR REPLACE FUNCTION public.perform_lifecycle_action(p_collection asset_collection, p_asset_id uuid, p_action asset_action, p_assigned_to text DEFAULT NULL::text, p_detail text DEFAULT NULL::text)
+ RETURNS asset_collection
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_table text := p_collection::text;
+  v_history_table text := case p_collection
+    when 'serialized_assets' then 'serialized_asset_history'
+    when 'active_laptops_np' then 'active_laptops_np_history'
+    when 'monitors' then 'monitors_history'
+    when 'other_equipment' then 'other_equipment_history'
+  end;
+  v_actor uuid := auth.uid();
+  v_role user_role;
+  v_current_status asset_status;
+  v_new_status asset_status;
+  v_moved_from_inventory boolean;
+  v_row record;
+begin
+  select role into v_role from profiles where id = v_actor;
+
+  if v_role is null then
+    raise exception 'Not authorized';
+  end if;
+  if v_role = 'viewer' then
+    raise exception 'Viewers cannot perform lifecycle actions';
+  end if;
+  if v_role = 'scanner' and p_action not in ('provide', 'collect') then
+    raise exception 'Scanners can only Provide or Collect';
+  end if;
+
+  execute format('select status from %I where id = $1 for update', v_table)
+    into v_current_status
+    using p_asset_id;
+
+  if v_current_status is null then
+    raise exception 'Asset not found in %', v_table;
+  end if;
+
+  v_new_status := case
+    when p_action = 'provide' and v_current_status in ('available', 'retained', 'decommissioned')
+      then 'provided'::asset_status
+    when p_action = 'retain' and v_current_status in ('available', 'decommissioned')
+      then 'retained'::asset_status
+    when p_action = 'mark_damaged' and v_current_status in ('available', 'provided', 'retained', 'decommissioned')
+      then 'damaged'::asset_status
+    when p_action = 'collect' and v_current_status = 'provided'
+      then 'available'::asset_status
+    when p_action = 'transfer' and v_current_status = 'provided'
+      then 'provided'::asset_status
+    when p_action = 'decommission' and v_current_status = 'provided'
+      then 'decommissioned'::asset_status
+    when p_action = 'mark_repaired' and v_current_status = 'damaged'
+      then 'available'::asset_status
+    when p_action = 'mark_nonfunctional' and v_current_status = 'damaged'
+      then 'nonfunctional'::asset_status
+    else null
+  end;
+
+  if v_new_status is null then
+    raise exception 'Action % is not allowed from status %', p_action, v_current_status;
+  end if;
+
+  if p_action in ('provide', 'transfer') and coalesce(btrim(p_assigned_to), '') = '' then
+    raise exception 'assigned_to is required for %', p_action;
+  end if;
+
+  -- Laptop Inventory -> Active Laptops (NP): Provide moves the row instead
+  -- of updating it in place.
+  if p_collection = 'serialized_assets' and p_action = 'provide' then
+    select * into v_row from serialized_assets where id = p_asset_id;
+
+    insert into active_laptops_np
+      (id, name, category, serial, status, assigned_to, location, created_at, updated_at, moved_from_inventory)
+    values
+      (v_row.id, v_row.name, v_row.category, v_row.serial, 'provided', p_assigned_to, v_row.location, v_row.created_at, now(), true);
+
+    insert into active_laptops_np_history (asset_id, date, action, detail, actor_user_id)
+    select asset_id, date, action, detail, actor_user_id from serialized_asset_history where asset_id = p_asset_id;
+
+    insert into active_laptops_np_history (asset_id, action, detail, actor_user_id)
+    values (p_asset_id, 'provide', nullif(p_detail, ''), v_actor);
+
+    delete from serialized_assets where id = p_asset_id; -- cascades serialized_asset_history
+
+    return 'active_laptops_np'::asset_collection;
+  end if;
+
+  -- Active Laptops (NP) -> Laptop Inventory: Collect/Decommission on a
+  -- laptop that arrived here via the move above returns it to Inventory. A
+  -- genuine Next Perimeter laptop (moved_from_inventory = false) never
+  -- moves — it stays here regardless of status, same as before this change.
+  if p_collection = 'active_laptops_np' and p_action in ('collect', 'decommission') then
+    select moved_from_inventory into v_moved_from_inventory
+      from active_laptops_np where id = p_asset_id;
+
+    if v_moved_from_inventory then
+      select * into v_row from active_laptops_np where id = p_asset_id;
+
+      insert into serialized_assets
+        (id, name, category, serial, status, assigned_to, location, created_at, updated_at)
+      values
+        (v_row.id, v_row.name, v_row.category, v_row.serial, v_new_status, null, v_row.location, v_row.created_at, now());
+
+      insert into serialized_asset_history (asset_id, date, action, detail, actor_user_id)
+      select asset_id, date, action, detail, actor_user_id from active_laptops_np_history where asset_id = p_asset_id;
+
+      insert into serialized_asset_history (asset_id, action, detail, actor_user_id)
+      values (p_asset_id, p_action::text, nullif(p_detail, ''), v_actor);
+
+      delete from active_laptops_np where id = p_asset_id; -- cascades active_laptops_np_history
+
+      return 'serialized_assets'::asset_collection;
+    end if;
+  end if;
+
+  if p_action in ('provide', 'transfer') then
+    execute format('update %I set status = $1, assigned_to = $2 where id = $3', v_table)
+      using v_new_status, p_assigned_to, p_asset_id;
+  elsif p_action in ('collect', 'decommission') then
+    execute format('update %I set status = $1, assigned_to = null where id = $2', v_table)
+      using v_new_status, p_asset_id;
+  else
+    execute format('update %I set status = $1 where id = $2', v_table)
+      using v_new_status, p_asset_id;
+  end if;
+
+  execute format(
+    'insert into %I (asset_id, action, detail, actor_user_id) values ($1, $2, $3, $4)',
+    v_history_table
+  ) using p_asset_id, p_action::text, nullif(p_detail, ''), v_actor;
+
+  return p_collection;
+end;
+$function$;
+
 create or replace view equipment_register_mismatches
   with (security_invoker = true) as
 with devices as (

@@ -32,10 +32,14 @@
 -- 5. Devices issued from the register must be Available (not Retained or
 --    Decommissioned).
 --
--- 6. One in-progress offboarding per employee. Checked when a record is
+-- 6. One in-progress offboarding per employee. Checked (under advisory
+--    locks, so simultaneous requests cannot both pass) when a record is
 --    created or linked to an employee, so duplicates that already exist
 --    stay as they are (history is never rewritten) and only new ones are
 --    prevented. A completed record never blocks a later offboarding.
+--
+-- 7. Device-page Provide of a set-aside (Retained / Decommissioned) device
+--    requires it to be unassigned and to have no open register issue.
 -- =========================================================================
 
 -- ----------------------------------------------------------- 1. Bulk Stock
@@ -353,12 +357,24 @@ end;
 $$;
 
 -- ------------------------- 6. One in-progress offboarding per employee
+-- The check runs under transaction-scoped advisory locks, so two people
+-- starting the same offboarding at the same moment cannot both pass it:
+-- the second waits for the first, then re-checks and sees its row (after a
+-- COMMIT) or proceeds (after a ROLLBACK). A person can be named three ways
+-- (the employee id, the employee record's name, the name typed on the
+-- checklist), so all of them are locked, in one fixed order (ascending key)
+-- so two sessions can never deadlock, and every form is compared, so a
+-- linked and an unlinked record for the same person cannot slip past each other.
 create function prevent_duplicate_offboarding()
 returns trigger
 language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_record_key text;
+  v_typed_key text := normalize_person_name(new.employee_name);
+  v_lock bigint;
 begin
   if equipment_setting('equipment.sync_disabled') = 'on' then
     return new; -- restores bring historical rows back exactly as they were
@@ -369,14 +385,40 @@ begin
   if new.removed_access and new.laptop_outcome is not null then
     return new; -- a completed record is history, not "in progress"
   end if;
+
+  if new.employee_id is not null then
+    select e.name_key into v_record_key from employees e where e.id = new.employee_id;
+  end if;
+
+  -- Lock first (ascending key order), check second.
+  for v_lock in
+    select k from (
+      select distinct k from (values
+        (hashtextextended('offboarding:employee:' || new.employee_id::text, 0)),
+        (hashtextextended('offboarding:name:' || v_typed_key, 0)),
+        (hashtextextended('offboarding:name:' || v_record_key, 0))
+      ) as t(k)
+      where k is not null
+    ) keys order by k
+  loop
+    perform pg_advisory_xact_lock(v_lock);
+  end loop;
+
+  -- Re-check now that nobody else is mid-way through the same person.
   if exists (
     select 1 from offboarding_checklists o
     where o.id is distinct from new.id
       and not (o.removed_access and o.laptop_outcome is not null)
       and (
+        -- same employee record
         (new.employee_id is not null and o.employee_id = new.employee_id)
-        or (normalize_person_name(o.employee_name) = normalize_person_name(new.employee_name)
+        -- same name, when either side is not linked to an employee
+        or (v_typed_key is not null and normalize_person_name(o.employee_name) = v_typed_key
             and (o.employee_id is null or new.employee_id is null))
+        -- an unlinked record that carries the employee record's name
+        or (v_record_key is not null and o.employee_id is null and normalize_person_name(o.employee_name) = v_record_key)
+        -- a linked record whose employee record carries the name typed on this unlinked one
+        or (new.employee_id is null and v_typed_key is not null and o.employee_id in (select e.id from employees e where e.name_key = v_typed_key))
       )
   ) then
     raise exception 'An offboarding for "%" is already in progress. Open that record instead of starting another.', new.employee_name;
@@ -389,3 +431,160 @@ revoke execute on function prevent_duplicate_offboarding() from public, anon, au
 create trigger offboarding_one_in_progress
   before insert or update of employee_id on offboarding_checklists
   for each row execute function prevent_duplicate_offboarding();
+
+-- ----------------------------- 7. Providing a set-aside device (device page)
+-- The device page may Provide a device that was set aside (Retained or
+-- Decommissioned) — unchanged — but only if nothing contradicts that: the
+-- device must be unassigned (so it is not under an authorized retention by
+-- its employee) and the register must hold no open issue for it (so Provide
+-- can never create a second open issue). Everything else in the function,
+-- including the history it writes, is exactly as in 030.
+create or replace function perform_lifecycle_action(p_collection asset_collection, p_asset_id uuid, p_action asset_action, p_assigned_to text DEFAULT NULL::text, p_detail text DEFAULT NULL::text)
+returns asset_collection
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_table text := p_collection::text;
+  v_history_table text := case p_collection
+    when 'serialized_assets' then 'serialized_asset_history'
+    when 'active_laptops_np' then 'active_laptops_np_history'
+    when 'monitors' then 'monitors_history'
+    when 'other_equipment' then 'other_equipment_history'
+  end;
+  v_actor uuid := auth.uid();
+  v_role user_role;
+  v_current_status asset_status;
+  v_new_status asset_status;
+  v_moved_from_inventory boolean;
+  v_row record;
+  v_assigned text;
+begin
+  select role into v_role from profiles where id = v_actor;
+
+  if v_role is null then
+    raise exception 'Not authorized';
+  end if;
+  if v_role = 'viewer' then
+    raise exception 'Viewers cannot perform lifecycle actions';
+  end if;
+  if v_role = 'scanner' and p_action not in ('provide', 'collect') then
+    raise exception 'Scanners can only Provide or Collect';
+  end if;
+
+  execute format('select status from %I where id = $1 for update', v_table)
+    into v_current_status
+    using p_asset_id;
+
+  if v_current_status is null then
+    raise exception 'Asset not found in %', v_table;
+  end if;
+
+  v_new_status := case
+    when p_action = 'provide' and v_current_status in ('available', 'retained', 'decommissioned')
+      then 'provided'::asset_status
+    when p_action = 'retain' and v_current_status in ('available', 'decommissioned')
+      then 'retained'::asset_status
+    when p_action = 'mark_damaged' and v_current_status in ('available', 'provided', 'retained', 'decommissioned')
+      then 'damaged'::asset_status
+    when p_action = 'collect' and v_current_status = 'provided'
+      then 'available'::asset_status
+    when p_action = 'transfer' and v_current_status = 'provided'
+      then 'provided'::asset_status
+    when p_action = 'decommission' and v_current_status = 'provided'
+      then 'decommissioned'::asset_status
+    when p_action = 'mark_repaired' and v_current_status = 'damaged'
+      then 'available'::asset_status
+    when p_action = 'mark_nonfunctional' and v_current_status = 'damaged'
+      then 'nonfunctional'::asset_status
+    else null
+  end;
+
+  if v_new_status is null then
+    raise exception 'Action % is not allowed from status %', p_action, v_current_status;
+  end if;
+
+  if p_action in ('provide', 'transfer') and coalesce(btrim(p_assigned_to), '') = '' then
+    raise exception 'assigned_to is required for %', p_action;
+  end if;
+
+  -- 033: a set-aside device can be provided only if it is really free.
+  if p_action = 'provide' and v_current_status in ('retained', 'decommissioned') then
+    execute format('select assigned_to from %I where id = $1', v_table) into v_assigned using p_asset_id;
+    if nullif(btrim(v_assigned), '') is not null then
+      raise exception 'This device is still assigned to % (an authorized retention or an unfinished return). Collect it first, then provide it.', btrim(v_assigned);
+    end if;
+    if exists (select 1 from equipment_issues where asset_id = p_asset_id and status = 'open') then
+      raise exception 'This device already has an open issue in the equipment register. Return it first, then provide it.';
+    end if;
+  end if;
+
+  -- Laptop Inventory -> Active Laptops (NP): Provide moves the row instead
+  -- of updating it in place.
+  if p_collection = 'serialized_assets' and p_action = 'provide' then
+    select * into v_row from serialized_assets where id = p_asset_id;
+
+    insert into active_laptops_np
+      (id, name, category, serial, status, assigned_to, location, created_at, updated_at, moved_from_inventory)
+    values
+      (v_row.id, v_row.name, v_row.category, v_row.serial, 'provided', p_assigned_to, v_row.location, v_row.created_at, now(), true);
+
+    insert into active_laptops_np_history (asset_id, date, action, detail, actor_user_id)
+    select asset_id, date, action, detail, actor_user_id from serialized_asset_history where asset_id = p_asset_id;
+
+    insert into active_laptops_np_history (asset_id, action, detail, actor_user_id)
+    values (p_asset_id, 'provide', nullif(p_detail, ''), v_actor);
+
+    delete from serialized_assets where id = p_asset_id; -- cascades serialized_asset_history
+
+    return 'active_laptops_np'::asset_collection;
+  end if;
+
+  -- Active Laptops (NP) -> Laptop Inventory: Collect/Decommission on a
+  -- laptop that arrived here via the move above returns it to Inventory. A
+  -- genuine Next Perimeter laptop (moved_from_inventory = false) never
+  -- moves — it stays here regardless of status, same as before this change.
+  if p_collection = 'active_laptops_np' and p_action in ('collect', 'decommission') then
+    select moved_from_inventory into v_moved_from_inventory
+      from active_laptops_np where id = p_asset_id;
+
+    if v_moved_from_inventory then
+      select * into v_row from active_laptops_np where id = p_asset_id;
+
+      insert into serialized_assets
+        (id, name, category, serial, status, assigned_to, location, created_at, updated_at)
+      values
+        (v_row.id, v_row.name, v_row.category, v_row.serial, v_new_status, null, v_row.location, v_row.created_at, now());
+
+      insert into serialized_asset_history (asset_id, date, action, detail, actor_user_id)
+      select asset_id, date, action, detail, actor_user_id from active_laptops_np_history where asset_id = p_asset_id;
+
+      insert into serialized_asset_history (asset_id, action, detail, actor_user_id)
+      values (p_asset_id, p_action::text, nullif(p_detail, ''), v_actor);
+
+      delete from active_laptops_np where id = p_asset_id; -- cascades active_laptops_np_history
+
+      return 'serialized_assets'::asset_collection;
+    end if;
+  end if;
+
+  if p_action in ('provide', 'transfer') then
+    execute format('update %I set status = $1, assigned_to = $2 where id = $3', v_table)
+      using v_new_status, p_assigned_to, p_asset_id;
+  elsif p_action in ('collect', 'decommission') then
+    execute format('update %I set status = $1, assigned_to = null where id = $2', v_table)
+      using v_new_status, p_asset_id;
+  else
+    execute format('update %I set status = $1 where id = $2', v_table)
+      using v_new_status, p_asset_id;
+  end if;
+
+  execute format(
+    'insert into %I (asset_id, action, detail, actor_user_id) values ($1, $2, $3, $4)',
+    v_history_table
+  ) using p_asset_id, p_action::text, nullif(p_detail, ''), v_actor;
+
+  return p_collection;
+end;
+$$;
