@@ -96,10 +96,20 @@ export interface PreviewRow {
 
 const text = (v: unknown) => (v === null || v === undefined ? '' : String(v)).trim()
 
-export function buildPreview(sheetRows: Record<string, unknown>[], headers: string[], directory: DirectoryEmployee[]): PreviewRow[] {
-  const map = mapHeaders(headers)
-  const byEmail = new Map<string, DirectoryEmployee>()
-  for (const e of directory) if (e.email_key) byEmail.set(e.email_key, e)
+export interface DuplicateMatches {
+  candidates: DirectoryEmployee[]
+  /** employee id -> why they might be the same person */
+  reasons: Record<string, string>
+}
+
+/**
+ * Who in the directory might be the same person as these fields: the one
+ * rule used by the Excel preview ("possible duplicate") and by the Add
+ * employee form. Nothing is ever merged automatically; this only finds people.
+ * Matches: same first + last name, an employee recorded under one word that
+ * is this first or last name, or the same email user name on another domain.
+ */
+export function duplicateFinder(directory: DirectoryEmployee[]) {
   const byName = new Map<string, DirectoryEmployee[]>()
   // Employees recorded under one word only (e.g. "Sadvi"), by that word.
   const bySingleWord = new Map<string, DirectoryEmployee[]>()
@@ -112,6 +122,28 @@ export function buildPreview(sheetRows: Record<string, unknown>[], headers: stri
     for (const k of keys) if (k && !k.includes(' ')) add(bySingleWord, k, e)
     if (e.email_key?.includes('@')) add(byEmailUser, e.email_key.split('@')[0], e)
   }
+  return (fields: Pick<EmployeeFields, 'first_name' | 'last_name' | 'email'>): DuplicateMatches => {
+    const reasons: Record<string, string> = {}
+    const suggest = (list: DirectoryEmployee[] | undefined, reason: string) => {
+      for (const c of list ?? []) if (!reasons[c.id]) reasons[c.id] = reason
+    }
+    suggest(byName.get(nameKey(`${fields.first_name} ${fields.last_name}`)), 'same name')
+    suggest(bySingleWord.get(nameKey(fields.first_name)), `recorded only as “${fields.first_name.trim()}”`)
+    suggest(bySingleWord.get(nameKey(fields.last_name)), `recorded only as “${fields.last_name.trim()}”`)
+    const key = fields.email ? emailKey(fields.email) : ''
+    if (key.includes('@')) {
+      const [user, domain] = key.split('@')
+      suggest(byEmailUser.get(user)?.filter((c) => c.email_key?.split('@')[1] !== domain), 'same email user name, different domain')
+    }
+    return { candidates: directory.filter((c) => reasons[c.id]), reasons }
+  }
+}
+
+export function buildPreview(sheetRows: Record<string, unknown>[], headers: string[], directory: DirectoryEmployee[]): PreviewRow[] {
+  const map = mapHeaders(headers)
+  const byEmail = new Map<string, DirectoryEmployee>()
+  for (const e of directory) if (e.email_key) byEmail.set(e.email_key, e)
+  const findDuplicates = duplicateFinder(directory)
   const seenEmails = new Map<string, number>()
   const out: PreviewRow[] = []
   sheetRows.forEach((raw, i) => {
@@ -136,18 +168,7 @@ export function buildPreview(sheetRows: Record<string, unknown>[], headers: stri
     if (match) {
       describeUpdate(row, match)
     } else {
-      const reasons: Record<string, string> = {}
-      const suggest = (list: DirectoryEmployee[] | undefined, reason: string) => {
-        for (const c of list ?? []) if (!reasons[c.id]) reasons[c.id] = reason
-      }
-      suggest(byName.get(nameKey(`${fields.first_name} ${fields.last_name}`)), 'same name')
-      suggest(bySingleWord.get(nameKey(fields.first_name)), `recorded only as “${fields.first_name.trim()}”`)
-      suggest(bySingleWord.get(nameKey(fields.last_name)), `recorded only as “${fields.last_name.trim()}”`)
-      if (key) {
-        const [user, domain] = key.split('@')
-        suggest(byEmailUser.get(user)?.filter((c) => c.email_key?.split('@')[1] !== domain), 'same email user name, different domain')
-      }
-      const candidates = directory.filter((c) => reasons[c.id])
+      const { candidates, reasons } = findDuplicates(fields)
       if (candidates.length) {
         row.kind = 'possible_duplicate'
         row.candidates = candidates

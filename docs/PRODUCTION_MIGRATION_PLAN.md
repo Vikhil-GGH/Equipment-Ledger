@@ -1,4 +1,4 @@
-# Production migration plan (021–030): draft, not approved
+# Production migration plan (021–030, 033): draft, not approved
 
 **Status:** nothing here has been run against production. Every checkpoint (CP) needs the owner's explicit approval; stop at any STOP or unexpected result. See also:
 - [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md): checklist per migration, preflight, decisions;
@@ -20,6 +20,7 @@
 | 028 | Active Employees directory fields and history | New columns (empty) | yes |
 | 029 | Activation safeguards; Bulk Stock deliveries; one bulk item per name + category | New column/table | yes |
 | 030 | Import History written only by imports; Remove access; two-factor for admin powers | New columns/table | yes (refuses while any account is revoked) |
+| 033 | Reliability fixes ([RELIABILITY_FIXES_033.md](RELIABILITY_FIXES_033.md)): Bulk Stock unknown-item message, retained laptops, tidy assignee names, ambiguous names refused, Available-only issuing, one in-progress offboarding per employee | None (functions, one view, two small triggers) | yes (exact) |
 
 ## Approval checkpoints
 

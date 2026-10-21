@@ -2,9 +2,9 @@ import { useState, type FormEvent } from 'react'
 import { Modal } from '../../components/Modal'
 import { getErrorMessage } from '../../lib/errors'
 import type { EmploymentStatus } from '../../types/database.types'
-import { useEmployeeHistory, useOpenEquipmentCount, useSaveEmployee, useSetEmploymentStatus, type HistoryEntry } from './api'
+import { useEmployeeDirectory, useEmployeeHistory, useOpenEquipmentCount, useSaveEmployee, useSetEmploymentStatus, type HistoryEntry } from './api'
 import { EMPLOYMENT_LABELS, type DirectoryEmployee } from './directoryModel'
-import { EMPLOYEE_COLUMNS, type EmployeeFields } from './employeeImport'
+import { EMPLOYEE_COLUMNS, duplicateFinder, type DuplicateMatches, type EmployeeFields } from './employeeImport'
 
 const SOURCE_LABELS: Record<string, string> = {
   manual: 'by hand',
@@ -49,10 +49,21 @@ export function EmployeeModal({ employee, canEdit, onClose }: { employee: Direct
   const [note, setNote] = useState('')
   const [error, setError] = useState<string | null>(null)
   const readOnly = !canEdit
+  // Adding someone: look for people who may already be in the directory (same rule as the Excel preview).
+  const { data: directory } = useEmployeeDirectory(!employee)
+  const [possible, setPossible] = useState<DuplicateMatches | null>(null)
 
   async function submit(e: FormEvent) {
     e.preventDefault()
     setError(null)
+    // First press: if this name may already be in the directory, show who and ask. Never merged automatically.
+    if (!employee && !possible && directory) {
+      const found = duplicateFinder(directory)(fields)
+      if (found.candidates.length) {
+        setPossible(found)
+        return
+      }
+    }
     try {
       await save.mutateAsync({ id: employee?.id ?? null, fields })
       onClose()
@@ -89,7 +100,10 @@ export function EmployeeModal({ employee, canEdit, onClose }: { employee: Direct
                 value={fields[c.key]}
                 readOnly={readOnly}
                 required={!employee && (c.key === 'first_name' || c.key === 'last_name')}
-                onChange={(e) => setFields((f) => ({ ...f, [c.key]: e.target.value }))}
+                onChange={(e) => {
+                  setPossible(null)
+                  setFields((f) => ({ ...f, [c.key]: e.target.value }))
+                }}
               />
             </label>
           ))}
@@ -148,6 +162,24 @@ export function EmployeeModal({ employee, canEdit, onClose }: { employee: Direct
           </section>
         )}
 
+        {possible && (
+          <section role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-900/20">
+            <p className="font-medium text-amber-900 dark:text-amber-200">
+              This may be someone who is already in the directory. Check before adding a second record:
+            </p>
+            <ul className="mt-1 space-y-1 text-xs text-amber-900 dark:text-amber-200">
+              {possible.candidates.map((c) => (
+                <li key={c.id}>
+                  <span className="font-medium">{c.full_name}</span>
+                  {c.email ? ` · ${c.email}` : ''} · {EMPLOYMENT_LABELS[c.employment_status ?? 'none']} — {possible.reasons[c.id]}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1 text-xs text-amber-900 dark:text-amber-200">
+              Nothing is merged automatically. If this really is a different person, add them anyway; otherwise cancel and edit the existing record.
+            </p>
+          </section>
+        )}
         {error && (
           <p role="alert" className="text-sm text-red-600 dark:text-red-400">
             {error}
@@ -159,7 +191,7 @@ export function EmployeeModal({ employee, canEdit, onClose }: { employee: Direct
           </button>
           {!readOnly && (
             <button type="submit" className="btn-primary" disabled={save.isPending}>
-              {save.isPending ? 'Saving…' : employee ? 'Save changes' : 'Add employee'}
+              {save.isPending ? 'Saving…' : employee ? 'Save changes' : possible ? 'Add as a different person' : 'Add employee'}
             </button>
           )}
         </div>

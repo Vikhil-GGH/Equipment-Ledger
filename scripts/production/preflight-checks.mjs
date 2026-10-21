@@ -6,7 +6,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const PLAN_FIRST = '20260901000021'
-const PLAN_LAST = '20260901000030'
+const PLAN_LAST = '20260901000033'
 
 /** Migration files with comments stripped (so commented-out SQL never counts). */
 export function loadMigrations(migrationsDir, adaptationsDir) {
@@ -72,10 +72,11 @@ export async function runChecks(q, migrations) {
     ['028', `select to_regclass('public.employee_history') is not null as e`],
     ['029', `select to_regclass('public.bulk_import_receipts') is not null as e`],
     ['030', `select to_regclass('public.profile_access_history') is not null as e`],
+    ['033', `select to_regprocedure('public.canonical_assignee(text)') is not null as e`],
   ]
   const present = {}
   for (const [m, sql] of markers) present[m] = !!(await one(sql)).e
-  report('INFO', 'Objects present for migrations 022–030', Object.entries(present).map(([m, p]) => `${m}:${p ? 'yes' : 'no'}`).join(' '))
+  report('INFO', 'Objects present for migrations 022–033', Object.entries(present).map(([m, p]) => `${m}:${p ? 'yes' : 'no'}`).join(' '))
   const ret = await one(`select pg_get_function_result(to_regprocedure('public.perform_lifecycle_action(asset_collection, uuid, asset_action, text, text)')) as r`)
   present['021'] = ret.r === 'asset_collection'
   if (ret.r === 'asset_collection') report('OK', '021 (Inventory ↔ Active Laptops moves)', 'applied', 'No fix-up needed.')

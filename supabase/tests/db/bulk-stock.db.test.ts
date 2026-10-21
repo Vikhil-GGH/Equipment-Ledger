@@ -166,11 +166,19 @@ describe('Bulk Stock refusals still hold (with the normal path proven above)', (
       expect(await errorOf(db, `select perform_bulk_action($1, 'issue', 21)`, [id])).toMatch(/Insufficient quantity/)
       expect(await errorOf(db, `select perform_bulk_action($1, 'return', 1)`, [id])).toMatch(/Insufficient quantity/)
       expect(await errorOf(db, `select perform_bulk_action($1, 'decommission', 1)`, [id])).toMatch(/from_bucket is required/)
-      // An item that doesn't exist is refused and changes nothing. KNOWN ISSUE (030): for issue/return/etc. the
-      // message is a foreign-key error rather than "Bulk item not found", because FOUND is stale after EXECUTE
-      // (receive_stock gives the intended message). Safe, but the wording is wrong; fixing it needs a migration.
-      expect(await errorOf(db, `select perform_bulk_action('00000000-0000-4000-8000-0000000000ff', 'issue', 1)`)).not.toBeNull()
+      // An item that doesn't exist is refused with a clear message, for every action (fixed in 033; on 030 the
+      // message was a foreign-key error because FOUND is not set by EXECUTE).
+      // Hosted staging stays on 030 until 033 is approved there: it must still refuse safely.
+      const fixed = (await db.query<{ y: boolean }>(`select to_regprocedure('canonical_assignee(text)') is not null as y`)).rows[0].y
+      for (const action of ['issue', 'return', 'retain', 'repair']) {
+        const msg = await errorOf(db, `select perform_bulk_action('00000000-0000-4000-8000-0000000000ff', '${action}', 1)`)
+        if (fixed) expect(msg, action).toMatch(/Bulk item not found/)
+        else expect(msg, action).not.toBeNull()
+      }
       expect(await errorOf(db, `select perform_bulk_action('00000000-0000-4000-8000-0000000000ff', 'receive_stock', 1)`)).toMatch(/Bulk item not found/)
+      const dmg = await errorOf(db, `select perform_bulk_action('00000000-0000-4000-8000-0000000000ff', 'mark_damaged', 1, 'available')`)
+      if (fixed) expect(dmg).toMatch(/Bulk item not found/)
+      else expect(dmg).not.toBeNull()
       expect(await buckets(id)).toEqual(before)
     })
   })

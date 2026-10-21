@@ -304,6 +304,44 @@ describe('Offboarding export', () => {
     expect(sheetRows(read, 'Equipment Returns').some((r) => ['LAP-TRF', 'DOCK-U'].includes(r['Serial Number'] as string))).toBe(false)
   })
 
+  it('an employee with two offboarding records: equipment is counted once, so the total agrees with the dashboard', async () => {
+    // The dashboard counts each employee's open items once (open items of every employee that has an offboarding record).
+    const dashboardPending = (issues: EquipmentIssue[], records: OffboardingRow[]) => {
+      const people = new Set(records.map((r) => r.employee_id).filter(Boolean))
+      return issues.filter((i) => i.status === 'open' && i.employee_id && people.has(i.employee_id)).length
+    }
+    const records = [
+      offboarding(1, { employee_name: 'Ann Lee', employee_id: 'emp-ann', created_at: ts(3) }), // older duplicate
+      offboarding(2, { employee_name: 'Ann Lee', employee_id: 'emp-ann', created_at: ts(9) }), // newest: owns the equipment
+      offboarding(3, { employee_name: 'Bo Chan', employee_id: 'emp-bo', created_at: ts(5) }),
+    ]
+    const issues = [
+      issue('emp-ann', { description: 'Laptop A', serial: 'A-1' }),
+      issue('emp-ann', { description: 'Monitor A', serial: 'A-2', asset_collection: 'monitors' }),
+      issue('emp-ann', { description: 'Dock A', serial: 'A-3', asset_collection: 'other_equipment' }),
+      issue('emp-ann', { description: 'Old laptop', serial: 'A-0', status: 'returned', closed_at: ts(4) }),
+      issue('emp-bo', { description: 'Laptop B', serial: 'B-1' }),
+    ]
+    const { api } = fakeApi({
+      offboarding_checklists: records,
+      employees: [{ id: 'emp-ann', full_name: 'Ann Lee', email: null }, { id: 'emp-bo', full_name: 'Bo Chan', email: null }],
+      equipment_issues: issues,
+    })
+    const data = await loadExportData<OffboardingRow>(api, 'offboarding_checklists', VIEW, offboardingProgress)
+    const { wb } = buildOffboardingWorkbook(XLSX, data, VIEW, new Date())
+    const rows = sheetRows(roundTrip(wb), 'Offboarding Summary')
+    const num = (v: unknown) => (typeof v === 'number' ? v : 0)
+    expect(rows).toHaveLength(3)
+    expect(rows.reduce((n, r) => n + num(r['Pending Return']), 0)).toBe(4) // Ann 3 + Bo 1 — not 7
+    expect(rows.reduce((n, r) => n + num(r['Pending Return']), 0)).toBe(dashboardPending(issues, records))
+    const ann = rows.filter((r) => r['Employee Name'] === 'Ann Lee')
+    expect(ann.filter((r) => r['Pending Return'] === 3)).toHaveLength(1)
+    expect(ann.filter((r) => r['Equipment Items'] === '')).toHaveLength(1) // the older record is blank, not zero
+    expect(XLSX.utils.sheet_to_json<string[]>(roundTrip(wb).Sheets['Export Details'], { header: 1 })).toEqual(
+      expect.arrayContaining([[expect.stringMatching(/Equipment counts/), expect.stringMatching(/counted once/)]]),
+    )
+  })
+
   it('a database without the employee register: records export, equipment columns stay blank', async () => {
     const { api } = fakeApi({ offboarding_checklists: [offboarding(1)] }, { missing: ['employees', 'equipment_issues'] })
     const data = await loadExportData<OffboardingRow>(api, 'offboarding_checklists', VIEW, offboardingProgress)

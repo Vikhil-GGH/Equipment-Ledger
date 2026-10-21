@@ -111,7 +111,7 @@ export interface IssuableDevice {
   location: string | null
 }
 
-/** Devices that can be Provided right now (the same statuses the lifecycle allows). */
+/** Devices that can be issued right now: Available only (retained, decommissioned, damaged and assigned ones are not offered). */
 export function useIssuableDevices(kind: 'laptop' | 'headset', enabled = true) {
   return useQuery({
     queryKey: ['register', 'issuable', kind],
@@ -120,7 +120,7 @@ export function useIssuableDevices(kind: 'laptop' | 'headset', enabled = true) {
       const tables: AssetCollection[] = kind === 'laptop' ? ['serialized_assets', 'active_laptops_np'] : ['other_equipment']
       const out: IssuableDevice[] = []
       for (const t of tables) {
-        let q = supabase.from(t).select('id, name, serial, status, location').in('status', ['available', 'retained', 'decommissioned'])
+        let q = supabase.from(t).select('id, name, serial, status, location').eq('status', 'available')
         if (kind === 'headset') q = q.or('category.ilike.%headset%,name.ilike.%headset%')
         const { data, error } = await q.order('serial')
         if (error) throw error

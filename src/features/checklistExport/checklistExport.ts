@@ -232,8 +232,17 @@ function outcomes(issues: EquipmentIssue[]) {
 }
 
 export function offboardingSummaryColumns(data: ExportData<OffboardingRow>): Column<OffboardingRow>[] {
-  const rowsOf = (r: OffboardingRow) => equipmentFor(data, r).filter(isReturnRow)
-  const has = (r: OffboardingRow) => !!r.employee_id && data.registerAvailable
+  // An employee's equipment is counted once, on their most recent record, so the totals agree with the
+  // dashboard even if the same employee has more than one offboarding record.
+  const newest = new Map<string, OffboardingRow>()
+  for (const r of data.records) {
+    if (!r.employee_id) continue
+    const cur = newest.get(r.employee_id)
+    if (!cur || r.created_at > cur.created_at) newest.set(r.employee_id, r)
+  }
+  const owns = (r: OffboardingRow) => !!r.employee_id && newest.get(r.employee_id)?.id === r.id
+  const rowsOf = (r: OffboardingRow) => (owns(r) ? equipmentFor(data, r).filter(isReturnRow) : [])
+  const has = (r: OffboardingRow) => owns(r) && data.registerAvailable
   const prog = (r: OffboardingRow) => returnProgress(rowsOf(r))
   const kind = (r: OffboardingRow, pred: (i: EquipmentIssue) => boolean) => outcomes(rowsOf(r).filter(pred))
   const isMonitor = (i: EquipmentIssue) => i.item_kind === 'serialized' && i.asset_collection === 'monitors'
@@ -334,7 +343,7 @@ export function buildOffboardingWorkbook(XLSX: typeof XLSXTypes, data: ExportDat
   const history = assignIssuesToRecords(data, (i) => i.offboarding_id, isHistoryRow)
   XLSX.utils.book_append_sheet(wb, buildSheet(XLSX, offboardingHistoryColumns(), history), 'Equipment History')
   const lines = details('Offboarding', view, data.records.length, placed.length, 'Equipment rows', exportedAt, data.registerAvailable)
-  lines.splice(7, 0, ['Equipment history rows', String(history.length)], [
+  lines.splice(7, 0, ['Equipment counts', 'If an employee has more than one offboarding record, their equipment is counted once, on the most recent record (the older record\'s equipment columns are blank).'], ['Equipment history rows', String(history.length)], [
     'Equipment History',
     'Historical records only: every closed register entry for the employee, including items transferred to someone else or unassigned outside a return (which the Offboarding page and Equipment Returns leave out). They are not counted in pending returns or progress. Entries the register could not tie to a single employee are not included.',
   ])
