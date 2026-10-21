@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
+import { fetchAllRows, type PagedSource } from '../../lib/fetchAllRows'
 import type { AssetCollection, AssetStatus, RequirementAnswer } from '../../types/database.types'
 import type { EquipmentIssue, ReturnOutcome } from './registerModel'
 
@@ -120,11 +121,15 @@ export function useIssuableDevices(kind: 'laptop' | 'headset', enabled = true) {
       const tables: AssetCollection[] = kind === 'laptop' ? ['serialized_assets', 'active_laptops_np'] : ['other_equipment']
       const out: IssuableDevice[] = []
       for (const t of tables) {
-        let q = supabase.from(t).select('id, name, serial, status, location').eq('status', 'available')
-        if (kind === 'headset') q = q.or('category.ilike.%headset%,name.ilike.%headset%')
-        const { data, error } = await q.order('serial')
-        if (error) throw error
-        out.push(...(data as Omit<IssuableDevice, 'collection'>[]).map((d) => ({ ...d, collection: t })))
+        // Every Available device, read page by page (the API stops at 1,000 per request).
+        const { rows } = await fetchAllRows<Omit<IssuableDevice, 'collection'> & { id: string }>(supabase as unknown as PagedSource, t, {
+          columns: 'id, name, serial, status, location',
+          filter: (q) => {
+            const available = q.eq!('status', 'available')
+            return kind === 'headset' ? available.or!('category.ilike.%headset%,name.ilike.%headset%') : available
+          },
+        })
+        out.push(...rows.sort((a, b) => a.serial.localeCompare(b.serial)).map((d) => ({ ...d, collection: t })))
       }
       return out
     },

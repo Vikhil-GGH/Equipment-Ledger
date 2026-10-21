@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
+import { fetchAllRows, type PagedSource } from '../../lib/fetchAllRows'
 import type { AssetAction, AssetCollection, AssetStatus } from '../../types/database.types'
 
 export interface AssetRow {
@@ -43,22 +44,13 @@ function historyTable(collection: AssetCollection) {
 export function useAssetsList(collection: AssetCollection, search?: string) {
   return useQuery({
     queryKey: ['assets', collection, 'list', search ?? ''],
+    // Every matching row, read page by page (the API stops at 1,000 per request), newest change first.
     queryFn: async () => {
-      let query = supabase
-        .from(collection)
-        .select('*')
-        .order('updated_at', { ascending: false })
-
-      if (search && search.trim()) {
-        const term = search.trim()
-        query = query.or(
-          `name.ilike.%${term}%,serial.ilike.%${term}%,assigned_to.ilike.%${term}%`,
-        )
-      }
-
-      const { data, error } = await query
-      if (error) throw error
-      return data as AssetRow[]
+      const term = search?.trim()
+      const { rows } = await fetchAllRows<AssetRow>(supabase as unknown as PagedSource, collection, {
+        filter: term ? (q) => q.or!(`name.ilike.%${term}%,serial.ilike.%${term}%,assigned_to.ilike.%${term}%`) : undefined,
+      })
+      return rows.sort((a, b) => b.updated_at.localeCompare(a.updated_at) || a.id.localeCompare(b.id))
     },
   })
 }

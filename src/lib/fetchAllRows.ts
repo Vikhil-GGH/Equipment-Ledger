@@ -25,8 +25,10 @@ export interface PagedQuery {
   order(column: string, options: { ascending: boolean }): {
     range(from: number, to: number): PromiseLike<PageResult>
   }
-  /** Only needed when a `filter` option uses it. */
+  /** Only needed when a `filter` option uses them. */
   ilike?(column: string, pattern: string): PagedQuery
+  eq?(column: string, value: string): PagedQuery
+  or?(filters: string): PagedQuery
 }
 
 export interface PagedSource {

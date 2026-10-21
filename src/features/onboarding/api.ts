@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
+import { fetchAllRows, type PagedSource } from '../../lib/fetchAllRows'
 import type { RequirementAnswer } from '../../types/database.types'
 
 export interface OnboardingRow {
@@ -22,17 +23,13 @@ export interface OnboardingRow {
 export function useOnboardingList(search?: string) {
   return useQuery({
     queryKey: ['onboarding', 'list', search ?? ''],
+    // Every matching record, read page by page (the API stops at 1,000 per request), newest first.
     queryFn: async () => {
-      let query = supabase
-        .from('onboarding_checklists')
-        .select('*')
-        .order('created_at', { ascending: false })
-      if (search && search.trim()) {
-        query = query.ilike('employee_name', `%${search.trim()}%`)
-      }
-      const { data, error } = await query
-      if (error) throw error
-      return data as OnboardingRow[]
+      const term = search?.trim()
+      const { rows } = await fetchAllRows<OnboardingRow>(supabase as unknown as PagedSource, 'onboarding_checklists', {
+        filter: term ? (q) => q.ilike!('employee_name', `%${term}%`) : undefined,
+      })
+      return rows.sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id))
     },
   })
 }

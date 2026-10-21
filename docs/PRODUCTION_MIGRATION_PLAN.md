@@ -2,7 +2,8 @@
 
 **Status:** nothing here has been run against production. Every checkpoint (CP) needs the owner's explicit approval; stop at any STOP or unexpected result. See also:
 - [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md): checklist per migration, preflight, decisions;
-- [DATABASE_SSL.md](DATABASE_SSL.md): verified connections.
+- [DATABASE_SSL.md](DATABASE_SSL.md): verified connections;
+- [PRODUCTION_REHEARSAL_RUNBOOK.md](PRODUCTION_REHEARSAL_RUNBOOK.md): the read-only preflight, restore-tested backup and rehearsal on a copy, step by step.
 
 **Security baseline: migration 030.** Migration 031 (two-factor for all admin access) and proposal 032 (sign-in blocking) were discontinued on 2026-10-21 and archived in [../archive/discontinued-031-032/](../archive/discontinued-031-032/README.md). They are not part of this plan.
 
@@ -92,8 +93,9 @@ Production data includes employee personal data, so every copy is handled as con
 5. Admins enrol on the Security page and sign in with the code; promote the second admin if there is one (CP6).
 6. **Smoke checks:**
    - sign-in;
-   - a password-only admin session sees only the Security page / code prompt;
-   - with the code: Overview, Laptop Inventory, Onboarding/Offboarding, Export backup (counts verified), Access & Roles.
+   - a password-only admin session works at editor level, and admin-only actions (Access & Roles, role changes, restore) ask for the code;
+   - with the code: Overview, Laptop Inventory, Onboarding/Offboarding, Export backup (counts verified), Access & Roles;
+   - register consistency: the register-mismatch view is empty (the smoke test "register matches every device" passes).
 7. Final comparison; end the freeze (CP7).
 
 ## Recovery

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
+import { fetchAllRows, type PagedSource } from '../../lib/fetchAllRows'
 import type { BulkAction, BulkBucket } from '../../types/database.types'
 
 export interface BulkItemRow {
@@ -30,15 +31,13 @@ export interface BulkItemHistoryRow {
 export function useBulkItemsList(search?: string) {
   return useQuery({
     queryKey: ['bulk-items', 'list', search ?? ''],
+    // Every matching item, read page by page (the API stops at 1,000 per request), by name.
     queryFn: async () => {
-      let query = supabase.from('bulk_items').select('*').order('name', { ascending: true })
-      if (search && search.trim()) {
-        const term = search.trim()
-        query = query.or(`name.ilike.%${term}%,category.ilike.%${term}%`)
-      }
-      const { data, error } = await query
-      if (error) throw error
-      return data as BulkItemRow[]
+      const term = search?.trim()
+      const { rows } = await fetchAllRows<BulkItemRow>(supabase as unknown as PagedSource, 'bulk_items', {
+        filter: term ? (q) => q.or!(`name.ilike.%${term}%,category.ilike.%${term}%`) : undefined,
+      })
+      return rows.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
     },
   })
 }

@@ -67,11 +67,13 @@ export function useExistingBulkItemKeys(enabled = true) {
     queryKey: ['import', 'existing-bulk-keys'],
     enabled,
     queryFn: async () => {
-      const { data, error } = await supabase.from('bulk_items').select('name, category')
-      if (error) throw error
+      // Every item, read page by page (the API stops at 1,000 per request).
+      const { rows } = await fetchAllRows<{ id: string; name: string; category: string }>(supabase as unknown as PagedSource, 'bulk_items', {
+        columns: 'id, name, category',
+      })
       // Same rule as the database (bulk_item_key): case and spacing ignored.
       const key = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase()
-      return new Set(data.map((r) => `${key(r.name)}|||${key(r.category)}`))
+      return new Set(rows.map((r) => `${key(r.name)}|||${key(r.category)}`))
     },
   })
 }
