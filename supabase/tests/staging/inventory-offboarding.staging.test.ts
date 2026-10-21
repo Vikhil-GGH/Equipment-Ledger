@@ -51,7 +51,7 @@ const inventory = async () => combineLaptops(await fetchAll('serialized_assets')
 const ALL = { tab: 'all', scope: 'all', search: '', sort: DEFAULT_LAPTOP_SORT } as const
 
 beforeAll(async () => {
-  ;({ c } = await signInReader(env)) // a synthetic viewer once 031 is applied (reader.ts)
+  ;({ c } = await signInReader(env)) // see reader.ts
 }, 60_000)
 afterAll(async () => {
   await c?.auth.signOut()

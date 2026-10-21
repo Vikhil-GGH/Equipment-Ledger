@@ -1,11 +1,10 @@
-# Production migration plan (021–031): draft, not approved
+# Production migration plan (021–030): draft, not approved
 
 **Status:** nothing here has been run against production. Every checkpoint (CP) needs the owner's explicit approval; stop at any STOP or unexpected result. See also:
 - [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md): checklist per migration, preflight, decisions;
-- [ADMIN_MFA_PROCEDURES.md](ADMIN_MFA_PROCEDURES.md): two admins, bootstrap, recovery;
 - [DATABASE_SSL.md](DATABASE_SSL.md): verified connections.
 
-032 (sign-in blocking) is a separate proposal ([PROPOSAL_032_AUTH_SIGN_IN_SYNC.md](PROPOSAL_032_AUTH_SIGN_IN_SYNC.md)) and is not part of this plan until approved.
+**Security baseline: migration 030.** Migration 031 (two-factor for all admin access) and proposal 032 (sign-in blocking) were discontinued on 2026-10-21 and archived in [../archive/discontinued-031-032/](../archive/discontinued-031-032/README.md). They are not part of this plan.
 
 ## What the migrations do
 
@@ -21,13 +20,12 @@
 | 028 | Active Employees directory fields and history | New columns (empty) | yes |
 | 029 | Activation safeguards; Bulk Stock deliveries; one bulk item per name + category | New column/table | yes |
 | 030 | Import History written only by imports; Remove access; two-factor for admin powers | New columns/table | yes (refuses while any account is revoked) |
-| 031 | Two-factor for **all** admin access; no admin without an authenticator | None | yes |
 
 ## Approval checkpoints
 
 | CP | Gate | Evidence the owner sees |
 |---|---|---|
-| CP0 | Staging complete (031 applied and checked; 032 decided) | Staging reports |
+| CP0 | Staging complete (030 applied and checked) | Staging reports |
 | CP1 | Run the production preflight (read-only) | Preflight output |
 | CP2 | Decisions on every STOP/INFO (duplicates, hand-made objects, admins, 021 handling) | Written decisions |
 | CP3 | Go / no-go for the window | Fresh backup verified (below), preflight clean again, CLI dry-run lists exactly the pending migrations, freeze announced |
@@ -46,7 +44,7 @@
    - anonymous sign-ins OFF; TOTP multi-factor ON;
    - public sign-ups as decided;
    - point-in-time recovery or daily backups on, and the latest restore point noted.
-3. **Admins:** decide who the two admins are (D3). Existing admins without an authenticator lose all access at 031 until they enrol, so they enrol in the window right after the frontend is deployed (step 7 below). If an admin's password may be known to anyone else, reset it first.
+3. **Admins:** decide who the two admins are (D3). Admin powers need a two-factor session from 030, so each admin enrols an authenticator on the Security page right after the frontend is deployed (step 5 below). If an admin's password may be known to anyone else, reset it first.
 
 ## Migration process: Supabase CLI (preferred)
 
@@ -89,7 +87,7 @@ Production data includes employee personal data, so every copy is handled as con
 2. Fresh restore point plus encrypted logical copy (restore-tested); preflight again, which must be clean (CP3).
 3. Apply the pending migrations one at a time (CLI process above). After each, compare every pre-existing row with the copy (CP4).
 4. Deploy the frontend built from the same commit (CP5).
-5. Admins enrol and sign in with the code ([ADMIN_MFA_PROCEDURES.md](ADMIN_MFA_PROCEDURES.md)); promote the second admin (CP6).
+5. Admins enrol on the Security page and sign in with the code; promote the second admin if there is one (CP6).
 6. **Smoke checks:**
    - sign-in;
    - a password-only admin session sees only the Security page / code prompt;
@@ -102,4 +100,4 @@ Production data includes employee personal data, so every copy is handled as con
   - Rollbacks run in reverse order, one at a time; each keeps what it removes in `private.*_backup_*`.
   - 030's refuses while any account is revoked. 021 has none (it adds one column).
 - **Rollback impossible, or data damaged:** restore the point-in-time backup to the restore point noted before the window. This also restores Auth. Then redeploy the previous frontend. The freeze means nothing is lost.
-- **Admin locked out after 031:** [ADMIN_MFA_PROCEDURES.md](ADMIN_MFA_PROCEDURES.md) §4–5. Rolling back 031 is a last resort; it restores editor-level access for password-only admins.
+- **Admin locked out of admin powers (030):** an editor or the owner can still work; the owner removes the old factor in the Supabase dashboard (Authentication → Users) and the admin enrols a new one on the Security page.

@@ -27,7 +27,7 @@ let anon: SupabaseClient
 beforeAll(async () => {
   const opts = { auth: { persistSession: false, autoRefreshToken: false } }
   anon = createClient(env.VITE_STAGING_SUPABASE_URL, env.VITE_STAGING_SUPABASE_ANON_KEY, opts) // signed out
-  ;({ c, role } = await signInReader(env)) // a synthetic viewer once 031 is applied (reader.ts)
+  ;({ c, role } = await signInReader(env)) // see reader.ts
 }, 60_000)
 afterAll(async () => {
   await c?.auth.signOut()
@@ -42,7 +42,7 @@ describe('employee equipment register through the real API (read-only)', () => {
   })
 
   it('the functions are exposed with the right parameters — exercised only where they reject before writing', async () => {
-    // A viewer (the synthetic reader, after 031) is refused before any check; an editor/admin reaches the validation.
+    // A viewer (the synthetic reader) is refused before any check; an editor/admin reaches the validation.
     const viewer = role === 'viewer'
     const issue = await c.rpc('issue_equipment', { p_employee_id: NO_SUCH_ID, p_collection: 'serialized_assets', p_asset_id: NO_SUCH_ID })
     expect(issue.error?.message).toMatch(viewer ? /Not authorized/ : /Employee not found/)

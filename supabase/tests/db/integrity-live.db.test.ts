@@ -128,8 +128,7 @@ describe.skipIf(!isStaging)('inventory integrity on the live staging database (r
   })
 
   it('the app paginated export through the real API is complete, and restoring that exact file round-trips the data (rolled back)', async () => {
-    // Read-only export with the app's own code, signed in as the synthetic reader (a
-    // password-only admin sees nothing since 031; reader.ts falls back to the admin before 031).
+    // Read-only export with the app's own code, signed in through reader.ts.
     const { c: api } = await signInReader(env)
     const backup = await exportBackup(api as unknown as PagedSource)
     await api.auth.signOut()

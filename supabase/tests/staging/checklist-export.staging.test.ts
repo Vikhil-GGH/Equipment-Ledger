@@ -38,7 +38,7 @@ let c: SupabaseClient
 
 
 beforeAll(async () => {
-  ;({ c } = await signInReader(env)) // a synthetic viewer once 031 is applied (reader.ts)
+  ;({ c } = await signInReader(env)) // see reader.ts
 }, 60_000)
 afterAll(async () => {
   await c?.auth.signOut()
