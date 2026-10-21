@@ -432,6 +432,9 @@ describe('4. legitimate workflows still work', () => {
     await inRolledBackTx(db, async () => {
       await setup()
       await actAs(db, ADMIN)
+      // Count only what this test adds: a live database may already hold earlier imports with the same file names.
+      const logged = async () => (await db.query<{ n: number }>(`select count(*)::int as n from import_events where filename in ('monitors.xlsx', 'bulk.xlsx')`)).rows[0].n
+      const logBefore = await logged()
       const assets = await rpc<{ created: number }>(
         db,
         `commit_asset_import('monitors', 'monitors.xlsx', $1::jsonb)`,
@@ -444,8 +447,7 @@ describe('4. legitimate workflows still work', () => {
         [JSON.stringify([{ name: 'ZZ-SECTEST Wireless Mouse', category: 'Accessory', location: '', quantity: 5 }])],
       )
       expect(bulk.updated).toBe(1)
-      const log = await db.query(`select filename from import_events where filename in ('monitors.xlsx', 'bulk.xlsx')`)
-      expect(log.rows).toHaveLength(2)
+      expect((await logged()) - logBefore).toBe(2)
     })
   })
 

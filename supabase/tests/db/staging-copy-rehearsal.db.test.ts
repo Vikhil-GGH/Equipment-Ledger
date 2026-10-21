@@ -1,5 +1,5 @@
 /**
- * Rehearsal of 20260901000033 on a COPY of real staging data.
+ * Rehearsal of a migration (default 20260901000033; see REHEARSAL_MIGRATION) on a COPY of real staging data.
  *
  * Needs a snapshot taken by `npm run staging:snapshot -- save <label>` (a
  * read-only backup of every public table, in the git-ignored
@@ -32,7 +32,10 @@ import { ADMIN, rpc } from './fixtures'
 
 const LABEL = process.env.REHEARSAL_SNAPSHOT
 const DIR = join(__dirname, '..', '..', '..', '.staging-state', 'snapshots', LABEL ?? '-')
-const M033 = '20260901000033_reliability_fixes.sql'
+// The migration being rehearsed: staging's state is loaded at every migration BEFORE it. Default 033; for the next
+// pending one set REHEARSAL_MIGRATION=<file name>.
+const M033 = process.env.REHEARSAL_MIGRATION ?? '20260901000033_reliability_fixes.sql'
+const DOWN = M033.split('_')[0] + '_down.sql'
 const enabled = !!LABEL && !isStaging && existsSync(join(DIR, 'data.json'))
 
 let db: Db
@@ -129,10 +132,10 @@ describe.skipIf(!enabled)(`033 on a copy of staging (${LABEL})`, () => {
   })
 
   it('the rollback restores the copy exactly', async () => {
-    await applyRollback(db, '20260901000033_down.sql')
+    await applyRollback(db, DOWN)
     expect(await hashes()).toEqual(before)
     expect(await all(`select * from equipment_register_mismatches order by serial`)).toEqual(oldMismatches)
-    expect((await all(`select to_regprocedure('canonical_assignee(text)') as f`))[0].f).toBeNull()
+    if (M033.startsWith('20260901000033')) expect((await all(`select to_regprocedure('canonical_assignee(text)') as f`))[0].f).toBeNull()
     void rpc // (fixtures import kept for parity with the other suites)
   })
 })
