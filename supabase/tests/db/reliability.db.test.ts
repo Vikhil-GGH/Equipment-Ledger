@@ -490,6 +490,90 @@ describe.skipIf(isStaging)('7. Device-page Provide of a set-aside device', () =>
   })
 })
 
+describe.skipIf(isStaging)('8. Onboarding "Assign device" (by serial) follows the same availability and retention rules (034)', () => {
+  const checklist = async (name: string) =>
+    (await one<{ id: string }>(`insert into onboarding_checklists (employee_name, created_by) values ($1, $2) returning id`, [name, ADMIN.id])).id
+  const setAside = async (tag: string, kind: 'retained' | 'decommissioned') => {
+    const s = await scene(tag)
+    await quiet(async () => {
+      await db.query(`update serialized_assets set status = $2 where id = $1`, [s.laptop, kind])
+    })
+    return s
+  }
+
+  it('an unassigned set-aside device (Retained or Decommissioned) can still be assigned; one open register row; history kept', async () => {
+    await inRolledBackTx(db, async () => {
+      for (const kind of ['retained', 'decommissioned'] as const) {
+        const tag = 'S' + kind.slice(0, 3)
+        const s = await setAside(tag, kind)
+        const onb = await checklist('Zz ' + tag + ' New Hire')
+        await rpc(db, `onboarding_assign_device($1, $2)`, [onb, tag + '-LAP-1'])
+        expect(await device(s.laptop), kind).toMatchObject({ tbl: 'active_laptops_np', status: 'provided', assigned_to: 'Zz ' + tag + ' New Hire' })
+        expect((await one(`select count(*)::int as n from equipment_issues where asset_id = $1 and status = 'open'`, [s.laptop])).n, kind).toBe(1)
+        expect((await one(`select equipment_assigned, assigned_asset_id from onboarding_checklists where id = $1`, [onb])), kind).toEqual({ equipment_assigned: true, assigned_asset_id: s.laptop })
+        expect((await all(`select action from active_laptops_np_history where asset_id = $1`, [s.laptop])).map((h) => h.action), kind).toContain('provide')
+      }
+    })
+  })
+
+  it('a set-aside device that is still assigned (an authorized retention) is refused and left exactly as it was', async () => {
+    await inRolledBackTx(db, async () => {
+      const s = await setAside('S2', 'retained')
+      await quiet(async () => {
+        await db.query(`update serialized_assets set assigned_to = 'Zz Keeper' where id = $1`, [s.laptop])
+      })
+      const onb = await checklist('Zz S2 New Hire')
+      expect(await errorOf(db, `select onboarding_assign_device($1, 'S2-LAP-1')`, [onb])).toMatch(/still assigned to Zz Keeper/)
+      expect(await device(s.laptop)).toMatchObject({ tbl: 'serialized_assets', status: 'retained', assigned_to: 'Zz Keeper' })
+      expect((await one(`select equipment_assigned from onboarding_checklists where id = $1`, [onb])).equipment_assigned).toBe(false)
+    })
+  })
+
+  it('a set-aside device that already has an open register issue is refused: never a second open issue', async () => {
+    await inRolledBackTx(db, async () => {
+      const s = await setAside('S3', 'retained')
+      await quiet(async () => {
+        await db.query(
+          `insert into equipment_issues (employee_id, assignee_name, item_kind, asset_collection, asset_id, description, serial, source)
+           values (null, 'Zz Stray', 'serialized', 'serialized_assets', $1, 'Dell', 'S3-LAP-1', 'lifecycle')`, [s.laptop])
+      })
+      const onb = await checklist('Zz S3 New Hire')
+      expect(await errorOf(db, `select onboarding_assign_device($1, 'S3-LAP-1')`, [onb])).toMatch(/open issue in the equipment register/)
+      expect((await one(`select count(*)::int as n from equipment_issues where asset_id = $1 and status = 'open'`, [s.laptop])).n).toBe(1)
+    })
+  })
+
+  it('Available devices behave as before; a Provided one (including one kept under authorized retention) is still refused', async () => {
+    await inRolledBackTx(db, async () => {
+      const s = await scene('S4')
+      const onb = await checklist('Zz S4 New Hire')
+      await rpc(db, `onboarding_assign_device($1, 'S4-LAP-1')`, [onb])
+      expect(await device(s.laptop)).toMatchObject({ status: 'provided', assigned_to: 'Zz S4 New Hire' })
+      const issue = (await one<{ id: string }>(`select id from equipment_issues where asset_id = $1 and status = 'open'`, [s.laptop])).id
+      await rpc(db, `return_equipment($1, 'retained_authorized', null, 'approved')`, [issue])
+      const other = await checklist('Zz S4 Other Hire')
+      expect(await errorOf(db, `select onboarding_assign_device($1, 'S4-LAP-1')`, [other])).toMatch(/not available to assign \(currently provided\)/)
+    })
+  })
+})
+
+describe.skipIf(isStaging)('Rollback of 034', () => {
+  it('restores the 033 definition exactly', async () => {
+    const fresh = await openDb()
+    try {
+      await applyUpTo(fresh, '20260901000034_onboarding_assign_device_rules.sql')
+      const def = async () => (await fresh.query<{ d: string }>(`select pg_get_functiondef(p.oid) as d from pg_proc p where p.proname = 'onboarding_assign_device'`)).rows[0].d.replace(/\r\n/g, '\n')
+      const at033 = await def()
+      await applyMigration(fresh, '20260901000034_onboarding_assign_device_rules.sql')
+      expect(await def()).not.toBe(at033)
+      await applyRollback(fresh, '20260901000034_down.sql')
+      expect(await def()).toBe(at033)
+    } finally {
+      await fresh.close()
+    }
+  })
+})
+
 describe.skipIf(isStaging)('Compatibility and rollback of 033', () => {
   let old: Db
   const tables = async (d: Db) => {

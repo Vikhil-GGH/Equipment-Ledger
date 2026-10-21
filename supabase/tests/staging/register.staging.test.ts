@@ -63,16 +63,42 @@ describe('employee equipment register through the real API (read-only)', () => {
     expect(error?.message).toMatch(/not authorized/i)
   })
 
-  it('the register matches every device: one open row per assigned device, no mismatches', async () => {
+  it('the register matches every device: one open row per assigned device (or an authorized retention), no mismatches', async () => {
     const { data: mismatches } = await c.from('equipment_register_mismatches').select('*')
     expect(mismatches).toEqual([])
-    let assigned = 0
+
+    // Every device that is assigned to someone...
+    const key = (n: string | null) => (n ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
+    const assigned: { id: string; who: string }[] = []
     for (const t of ['serialized_assets', 'active_laptops_np', 'monitors', 'other_equipment']) {
-      const { count } = await c.from(t).select('*', { head: true, count: 'exact' }).not('assigned_to', 'is', null).neq('assigned_to', '')
-      assigned += count ?? 0
+      const { data } = await c.from(t).select('id, assigned_to').not('assigned_to', 'is', null).neq('assigned_to', '')
+      for (const d of data ?? []) assigned.push({ id: d.id as string, who: key(d.assigned_to as string) })
     }
-    const { count: open } = await c.from('equipment_issues').select('*', { head: true, count: 'exact' }).eq('status', 'open').eq('item_kind', 'serialized')
-    expect(open).toBe(assigned)
+    const { data: rows } = await c.from('equipment_issues').select('asset_id, status, assignee_name, issued_at').eq('item_kind', 'serialized')
+    const byAsset = new Map<string, { status: string; assignee_name: string; issued_at: string }[]>()
+    for (const r of rows ?? []) byAsset.set(r.asset_id as string, [...(byAsset.get(r.asset_id as string) ?? []), r as never])
+
+    // ...has exactly one open row for that person, OR is under an authorized retention: its latest register
+    // row is retained_authorized for the same person (the employee keeps the device with approval).
+    let open = 0
+    let retained = 0
+    for (const d of assigned) {
+      const history = (byAsset.get(d.id) ?? []).sort((x, y) => y.issued_at.localeCompare(x.issued_at))
+      const opens = history.filter((r) => r.status === 'open')
+      expect(opens.length, `device ${d.id}: at most one open row`).toBeLessThanOrEqual(1)
+      if (opens.length === 1) {
+        open++
+        expect(key(opens[0].assignee_name), `device ${d.id}: open row names the assignee`).toBe(d.who)
+      } else {
+        expect(history[0]?.status, `device ${d.id} is assigned with no open row, so it must be under authorized retention`).toBe('retained_authorized')
+        expect(key(history[0].assignee_name), `device ${d.id}: the retention is for the person it is assigned to`).toBe(d.who)
+        retained++
+      }
+    }
+    // No open row without an assigned device behind it.
+    const { count: openTotal } = await c.from('equipment_issues').select('*', { head: true, count: 'exact' }).eq('status', 'open').eq('item_kind', 'serialized')
+    expect(openTotal).toBe(open)
+    expect(open + retained).toBe(assigned.length)
   })
 
   it('every closed register row is complete: retained and lost carry a reason, retained carries an approver', async () => {
