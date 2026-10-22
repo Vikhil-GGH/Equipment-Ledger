@@ -84,3 +84,27 @@ export async function applyStep(db, migrations, version, { sqlFor, adaptationsDi
     throw new Error(`${m.name} failed and was rolled back; nothing from it was applied. ${err.message}`)
   }
 }
+
+/**
+ * Rolls back ONE migration with its documented down script: only the most recently recorded one, only if a verified
+ * down script exists (035..029), in one transaction together with removing its history row. Older migrations are
+ * deliberately not rolled back here (029 keeps a private backup of employee history, so going further back needs a
+ * deliberate, approved removal of that data; the restore point covers it).
+ */
+export const ROLLBACKABLE = ['20260901000035', '20260901000034', '20260901000033', '20260901000030', '20260901000029']
+export async function rollbackStep(db, version, { rollbackDir }) {
+  const recorded = await recordedVersions(db)
+  if (!ROLLBACKABLE.includes(version)) throw new Error(`${version} cannot be rolled back automatically (verified rollbacks: ${ROLLBACKABLE.join(', ')})`)
+  if (recorded.at(-1) !== version) throw new Error(`${version} is not the most recently applied migration (${recorded.at(-1)} is): roll that back first`)
+  const sql = readFileSync(join(rollbackDir, `${version}_down.sql`), 'utf8')
+  await db.exec('begin')
+  try {
+    await db.exec(sql)
+    const r = await db.query(`delete from supabase_migrations.schema_migrations where version = $1`, [version])
+    if (r.rowCount !== 1) throw new Error('history row not found')
+    await db.exec('commit')
+  } catch (err) {
+    await db.exec('rollback').catch(() => {})
+    throw new Error(`Rollback of ${version} failed and was undone; nothing changed. ${err.message}`)
+  }
+}

@@ -21,19 +21,20 @@ import { afterAll, describe, expect, it } from 'vitest'
 // @ts-expect-error — plain .mjs modules without type declarations
 import { loadMigrations } from '../../../scripts/production/preflight-checks.mjs'
 // @ts-expect-error
-import { applyStep, ensureHistoryTable, planChain, recordStep, recordedVersions } from '../../../scripts/production/apply-core.mjs'
+import { applyStep, ensureHistoryTable, planChain, recordStep, recordedVersions, rollbackStep } from '../../../scripts/production/apply-core.mjs'
 // @ts-expect-error
 import { duplicateSerialDetails } from '../../../scripts/production/migration-state.mjs'
 // @ts-expect-error
 import { diffSignatures, schemaSignature } from '../../../scripts/production/schema-signature.mjs'
 // @ts-expect-error
-import { exportBackup, restoreBackup, tableDigest, verifyBackupFiles } from '../../../scripts/production/backup-core.mjs'
-import { applyMigration, applyRollback, inCommittedTx, isStaging, loadSupabaseStub, migrationFiles, openDb, readAdaptation, type Db } from './harness'
+import { compareToBackup, exportBackup, restoreBackup, tableDigest, verifyBackupFiles } from '../../../scripts/production/backup-core.mjs'
+import { applyMigration, inCommittedTx, isStaging, loadSupabaseStub, migrationFiles, openDb, readAdaptation, type Db } from './harness'
 import { seedUsers } from './fixtures'
 
 const ROOT = join(__dirname, '..', '..', '..')
 const MIG_DIR = join(ROOT, 'supabase', 'migrations')
 const ADAPT_DIR = join(ROOT, 'supabase', 'adaptations')
+const ROLLBACK_DIR = join(ROOT, 'supabase', 'rollback')
 const migrations = loadMigrations(MIG_DIR, ADAPT_DIR) as { version: string; name: string; sql: string }[]
 const sqlFor = (m: { name: string }) => readFileSync(join(MIG_DIR, m.name), 'utf8')
 const v = (n: number) => `202609010000${String(n).padStart(2, '0')}`
@@ -140,6 +141,10 @@ async function rehearse(dir: string) {
     if (next.version === v(28)) afterRecords = JSON.stringify(await schemaSignature(rows(expected)))
   }
   expect((await recordedVersions(expected)).length).toBe(migrations.length)
+  // the production compare tool (run after each live step) agrees: every pre-existing table still equals the backup
+  await expected.exec('begin read only')
+  const cmp = await compareToBackup(rows(expected), dir).finally(() => expected.exec('rollback'))
+  expect(cmp.filter((c: { status: string }) => c.status !== 'same')).toEqual([])
   expect(await schemaSignature(rows(expected)), 'final schema must equal a clean build').toEqual(await cleanSignature())
   const dupAfter = (await expected.query<{ n: number }>(`select count(*)::int as n from serial_duplicate_candidates`)).rows[0].n
   expect(dupAfter, 'duplicate serials must be kept and listed').toBeGreaterThan(0)
@@ -148,10 +153,12 @@ async function rehearse(dir: string) {
   // 6. rollback: the down scripts in reverse (035 back to 029), rows untouched at every step, schema back to the state just after 028.
   //    Going further back is deliberately not automatic: 029 keeps a private backup table of employee history (a rollback never
   //    deletes data), which blocks dropping 028's types; that would be a deliberate, approved removal. The restore point covers it.
+  // The production rollback path itself (apply-core rollbackStep): guards first, then 035..029 one at a time.
+  await expect(rollbackStep(expected, v(34), { rollbackDir: ROLLBACK_DIR })).rejects.toThrow(/not the most recently applied/)
+  await expect(rollbackStep(expected, v(28), { rollbackDir: ROLLBACK_DIR })).rejects.toThrow(/cannot be rolled back automatically/)
   for (const n of [35, 34, 33, 30, 29]) {
-    await applyRollback(expected, `${v(n)}_down.sql`).catch((e: Error) => {
-      throw new Error(`rollback ${v(n)} failed: ${e.message}`)
-    })
+    await rollbackStep(expected, v(n), { rollbackDir: ROLLBACK_DIR })
+    expect((await planChain(expected, migrations)).find((p: { version: string }) => p.version === v(n))?.action, `${v(n)} is pending again`).toBe('apply')
     expect(await originalDigests(expected, manifest), `a pre-existing row changed when rolling back ${v(n)}`).toEqual(before)
   }
   expect(JSON.stringify(await schemaSignature(rows(expected))), 'schema after rolling back 035..029 must equal the state just after 028').toBe(afterRecords)
@@ -182,6 +189,16 @@ describe.skipIf(isStaging)('production backup -> restore -> rehearsal', () => {
     expect(() => verifyBackupFiles(out)).toThrow(/does not match its recorded SHA-256/)
     writeFileSync(join(out, 'data.json'), original)
     expect(verifyBackupFiles(out).rows).toBeGreaterThan(300)
+    // the compare tool sees a changed row
+    const restoredCopy = await expectedState(PRESENT)
+    await restoreBackup(restoredCopy, out)
+    await restoredCopy.exec('begin read only')
+    expect((await compareToBackup(rows(restoredCopy), out)).every((c: { status: string }) => c.status === 'same')).toBe(true)
+    await restoredCopy.exec('rollback')
+    await restoredCopy.exec("update serialized_assets set status = 'damaged' where serial = 'INV-1'")
+    await restoredCopy.exec('begin read only')
+    expect((await compareToBackup(rows(restoredCopy), out)).filter((c: { status: string }) => c.status === 'changed').map((c: { table: string }) => c.table)).toEqual(['serialized_assets'])
+    await restoredCopy.exec('rollback')
     // a restore into the wrong schema is refused, not half-done
     const wrong = await openDb()
     open.push(wrong)

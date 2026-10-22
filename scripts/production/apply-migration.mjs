@@ -17,11 +17,12 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import pg from 'pg'
 import { loadMigrations } from './preflight-checks.mjs'
-import { applyStep, ensureHistoryTable, planChain, recordStep } from './apply-core.mjs'
+import { applyStep, ensureHistoryTable, planChain, recordStep, rollbackStep } from './apply-core.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const MIGRATIONS = join(ROOT, 'supabase', 'migrations')
 const ADAPTATIONS = join(ROOT, 'supabase', 'adaptations')
+const ROLLBACKS = join(ROOT, 'supabase', 'rollback')
 const fail = (m) => { console.error(`\n✖ ${m}\n`); process.exit(1) }
 const arg = (name) => { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : undefined }
 const has = (name) => process.argv.includes(name)
@@ -29,10 +30,11 @@ const has = (name) => process.argv.includes(name)
 const confirm = arg('--confirm-project')
 const record = arg('--record')
 const apply = arg('--apply')
+const rollback = arg('--rollback')
 const execute = has('--execute')
 if (!/^[a-z0-9]{20}$/.test(confirm ?? '')) fail('Give --confirm-project <the 20-character production project reference>.')
-if (record && apply) fail('One step at a time: use --record OR --apply, not both.')
-if (execute && !record && !apply) fail('--execute needs --record <version> or --apply <version>.')
+if ([record, apply, rollback].filter(Boolean).length > 1) fail('One step at a time: use --record OR --apply OR --rollback.')
+if (execute && !record && !apply && !rollback) fail('--execute needs --record, --apply or --rollback <version>.')
 const url = process.env.PRODUCTION_DB_URL
 if (!url) fail('PRODUCTION_DB_URL is not set (use the launcher script).')
 const u = new URL(url)
@@ -61,7 +63,15 @@ try {
   show(plan)
   const stops = plan.filter((p) => p.action === 'stop')
   if (stops.length) throw new Error(`STOP: ${stops.map((s) => s.version).join(', ')} is partly in place. Nothing will be run until it is understood.`)
-  if (execute) {
+  if (execute && rollback) {
+    console.log(`
+Executing: ROLLBACK ${rollback} …`)
+    await rollbackStep(db, rollback, { rollbackDir: ROLLBACKS })
+    console.log(`✔ ${rollback} rolled back and its history row removed.
+
+Plan now:`)
+    show(await planChain(db, migrations))
+  } else if (execute) {
     const version = record ?? apply
     const step = plan.find((p) => p.version === version)
     if (!step) throw new Error(`Unknown migration ${version}`)

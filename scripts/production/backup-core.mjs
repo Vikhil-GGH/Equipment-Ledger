@@ -118,3 +118,24 @@ export async function restoreBackup(db, dir) {
   }
   return { manifest, mismatches }
 }
+
+/**
+ * Compares a live (or restored) database with a backup, over the columns each table had in the backup, at the same
+ * instant (call inside a READ ONLY transaction). New columns and new tables never count as a change. Returns one
+ * entry per table: same / changed / missing. Counts and hashes only, never row contents.
+ */
+export async function compareToBackup(q, dir) {
+  const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'))
+  await q(`set local timezone = 'UTC'`)
+  const result = []
+  for (const [t, m] of Object.entries(manifest.tables)) {
+    const exists = (await q(`select to_regclass($1) is not null as e`, ['public.' + t]))[0].e
+    if (!exists) { result.push({ table: t, status: 'missing', before: m.count, now: null }); continue }
+    const cols = (await q(`select column_name as c from information_schema.columns where table_schema = 'public' and table_name = $1`, [t])).map((r) => r.c)
+    const lost = m.columns.filter((c) => !cols.includes(c))
+    if (lost.length) { result.push({ table: t, status: 'missing', before: m.count, now: null, detail: `columns gone: ${lost.join(', ')}` }); continue }
+    const d = await tableDigest(q, t, m.columns)
+    result.push({ table: t, status: d.count === m.count && d.hash === m.hash ? 'same' : 'changed', before: m.count, now: d.count })
+  }
+  return result
+}
