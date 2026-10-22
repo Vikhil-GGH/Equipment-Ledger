@@ -47,7 +47,7 @@ See [docs/DATABASE_SSL.md](DATABASE_SSL.md).
 - **Verified on staging:** connection with the certificate checked; wrong CA refused.
 - **Staging: enabled (2026-10-20).** The Supabase CA (fetched over HTTPS) matches the root the staging server presents, SHA-256 `80:70:25:AD…E6:CA:FA`; staging tools now verify it. Production: download its CA when the preflight is approved.
 
-## 5. Migration compatibility checklist, 021–030 and 033
+## 5. Migration compatibility checklist, 021–030 and 033–035
 
 Production's current state is unknown; the preflight reports it. All of these migrations ran on staging (PostgreSQL 17.11) through the same runner, one transaction each. Every one fails *safely*: an error rolls back the whole migration.
 
@@ -64,6 +64,8 @@ Production's current state is unknown; the preflight reports it. All of these mi
 | 029 | 028 | Bulk Stock items share a normalized name + category; `commit_bulk_import(text, jsonb)` missing | new column/table | yes | shared bulk names; dropped names | re-import adds nothing |
 | 030 | 029 | `import_events_insert_editor` or `profiles_delete_admin` missing or renamed | new columns/table | yes (refuses while any account is revoked) | admins + MFA; dropped names | admin powers need two-factor |
 | 033 | 030 | — (replaces functions and one view; adds triggers; no data-dependent statements) | none: no row is changed (proved on a copy of staging data) | yes (exact) | object marker `canonical_assignee` | retained laptop is not a mismatch; unknown Bulk Stock item message; duplicate offboarding refused |
+| 034 | 033 | — (replaces one function) | none | yes (exact) | function marker | assigning a set-aside device by serial needs it unassigned with no open register issue |
+| 035 | 034 | — (drops and recreates two functions with a new argument, replaces one) | none | yes (exact) | function marker | Provide of a Decommissioned device needs the confirmation; Non-functional can never be issued |
 
 Applies to all of them:
 - **Size:** small tables (hundreds of rows), so each migration takes seconds and locks briefly.

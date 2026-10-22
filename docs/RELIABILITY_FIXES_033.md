@@ -17,6 +17,11 @@ Found by the 2026-10-21 browser checks on staging (which is on 030). One small m
 | 6b | Device-page Provide of a set-aside (Retained / Decommissioned) device | It only checked the status | `perform_lifecycle_action` (replaced, otherwise identical to 030, history unchanged) now also requires the device to be unassigned (so not under an authorized retention) and to have no open register issue (so never a second open issue). The register path stays Available-only |
 | 7 | Add employee form accepted a second person with the same name without a word | The Excel import had a duplicate check; the form did not | The form uses the **same finder** as the Excel preview (`duplicateFinder`), shows who may be the same person and why, and asks. Nothing is merged. "Leave of Absence" is still flagged for review, never mapped |
 
+## Follow-ups (each its own migration, with a rollback script alongside)
+- **034: `onboarding_assign_device` (by serial)** follows the Provide rule for set-aside devices: unassigned and no open register issue, checked before the Inventory-to-Active move (that move would itself close an open row). Applied to staging 2026-10-21.
+- **035: Decommissioned guard rails** ([DECISION_DECOMMISSIONED_DEVICES.md](DECISION_DECOMMISSIONED_DEVICES.md)): a recorded refresh confirmation to Provide, Retain or Swap-in a Decommissioned device; Decommissioned can be retired directly with Mark non-functional (final); assign-by-serial refuses Decommissioned. `perform_lifecycle_action` and `perform_swap` get a new argument (dropped and recreated). Tests: section 9 of `reliability.db.test.ts`.
+- The staging check `register.staging.test.ts` accepts a device that is assigned with no open row only when its latest register row is a `retained_authorized` for the same person.
+
 ## Database objects
 
 Replaced (`create or replace`, same signatures, grants unchanged): `perform_bulk_action`, `sync_equipment_register`, `issue_equipment`, `perform_lifecycle_action`, view `equipment_register_mismatches`.

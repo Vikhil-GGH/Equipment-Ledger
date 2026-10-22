@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { AssetCollection } from '../../types/database.types'
-import { COLLECTION_BASE_PATH } from '../../lib/lifecycle'
+import { COLLECTION_BASE_PATH, REFRESH_CONFIRMATION_LABEL } from '../../lib/lifecycle'
 import { getErrorMessage } from '../../lib/errors'
 import { useSwap, useSwapCandidates, type AssetRow } from './api'
 
@@ -21,7 +21,10 @@ export function SwapPanel({
   const swap = useSwap(collection)
   const [newAssetId, setNewAssetId] = useState('')
   const [reason, setReason] = useState('')
+  const [refreshed, setRefreshed] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // A Decommissioned replacement must be confirmed as refreshed (same rule as Provide).
+  const needsRefresh = candidates?.find((c) => c.id === newAssetId)?.status === 'decommissioned'
 
   async function confirm() {
     setError(null)
@@ -38,6 +41,7 @@ export function SwapPanel({
         oldAssetId: asset.id,
         newAssetId,
         reason: reason.trim(),
+        refreshConfirmed: needsRefresh ? refreshed : undefined,
       })
       onDone()
       if (resultCollection !== collection) {
@@ -69,7 +73,10 @@ export function SwapPanel({
           <select
             required
             value={newAssetId}
-            onChange={(e) => setNewAssetId(e.target.value)}
+            onChange={(e) => {
+              setNewAssetId(e.target.value)
+              setRefreshed(false)
+            }}
             className="input"
           >
             <option value="" disabled>
@@ -97,6 +104,16 @@ export function SwapPanel({
         />
       </label>
 
+      {needsRefresh && (
+        <label className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-sm dark:border-amber-800 dark:bg-amber-900/20">
+          <input type="checkbox" className="mt-0.5" checked={refreshed} onChange={(e) => setRefreshed(e.target.checked)} />
+          <span>
+            <span className="font-medium">{REFRESH_CONFIRMATION_LABEL}</span>
+            <span className="block text-xs text-neutral-600 dark:text-neutral-400">The replacement is Decommissioned. The confirmation is written into its history.</span>
+          </span>
+        </label>
+      )}
+
       {error && (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
           {error}
@@ -109,7 +126,7 @@ export function SwapPanel({
         </button>
         <button
           className="btn-primary"
-          disabled={swap.isPending || !newAssetId || !reason.trim()}
+          disabled={swap.isPending || !newAssetId || !reason.trim() || (needsRefresh && !refreshed)}
           onClick={() => void confirm()}
         >
           {swap.isPending ? 'Swapping…' : 'Confirm swap'}

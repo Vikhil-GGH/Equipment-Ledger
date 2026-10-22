@@ -825,6 +825,7 @@ export interface Database {
           p_action: AssetAction
           p_assigned_to?: string | null
           p_detail?: string | null
+          p_refresh_confirmed?: boolean
         }
         Returns: AssetCollection
       }
@@ -835,6 +836,7 @@ export interface Database {
           p_old_asset_id: string
           p_new_asset_id: string
           p_reason: string
+          p_refresh_confirmed?: boolean
         }
         Returns: AssetCollection
       }

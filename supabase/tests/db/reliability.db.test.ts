@@ -436,7 +436,8 @@ describe.skipIf(isStaging)('7. Device-page Provide of a set-aside device', () =>
     await inRolledBackTx(db, async () => {
       for (const kind of ['retain', 'decommission'] as const) {
         const s = await setAside('P' + kind.slice(0, 3), kind)
-        await rpc(db, `perform_lifecycle_action('serialized_assets', $1, 'provide', 'Zz P${kind.slice(0, 3)} Person')`, [s.laptop])
+        // A Decommissioned device needs the refresh confirmation (035); a Retained one does not.
+        await rpc(db, `perform_lifecycle_action('serialized_assets', $1, 'provide', 'Zz P${kind.slice(0, 3)} Person', null, ${kind === 'decommission'})`, [s.laptop])
         expect(await device(s.laptop), kind).toMatchObject({ tbl: 'active_laptops_np', status: 'provided', assigned_to: 'Zz P' + kind.slice(0, 3) + ' Person' })
         expect((await one(`select count(*)::int as n from equipment_issues where asset_id = $1 and status = 'open'`, [s.laptop])).n, kind).toBe(1)
         const actions = (await all(`select action from active_laptops_np_history where asset_id = $1`, [s.laptop])).map((h) => h.action)
@@ -503,7 +504,7 @@ describe.skipIf(isStaging)('8. Onboarding "Assign device" (by serial) follows th
 
   it('an unassigned set-aside device (Retained or Decommissioned) can still be assigned; one open register row; history kept', async () => {
     await inRolledBackTx(db, async () => {
-      for (const kind of ['retained', 'decommissioned'] as const) {
+      for (const kind of ['retained'] as const) { // Decommissioned is refused here since 035 (see section 9)
         const tag = 'S' + kind.slice(0, 3)
         const s = await setAside(tag, kind)
         const onb = await checklist('Zz ' + tag + ' New Hire')
@@ -568,6 +569,131 @@ describe.skipIf(isStaging)('Rollback of 034', () => {
       expect(await def()).not.toBe(at033)
       await applyRollback(fresh, '20260901000034_down.sql')
       expect(await def()).toBe(at033)
+    } finally {
+      await fresh.close()
+    }
+  })
+})
+
+describe.skipIf(isStaging)('9. Decommissioned guard rails (035)', () => {
+  const decommissioned = async (tag: string) => {
+    const s = await scene(tag)
+    await rpc(db, `perform_lifecycle_action('serialized_assets', $1, 'provide', $2)`, [s.laptop, 'Zz ' + tag + ' First Holder'])
+    await rpc(db, `perform_lifecycle_action('active_laptops_np', $1, 'decommission')`, [s.laptop]) // employee left -> back to Inventory, Decommissioned
+    expect((await device(s.laptop)).status).toBe('decommissioned')
+    return s
+  }
+  const actions = async (id: string) => (await all<{ action: string; detail: string | null }>(`select action, detail from serialized_asset_history where asset_id = $1 union all select action, detail from active_laptops_np_history where asset_id = $1`, [id]))
+
+  it('Provide without the refresh confirmation is refused and changes nothing; with it, it works and the history says so', async () => {
+    await inRolledBackTx(db, async () => {
+      const s = await decommissioned('D1')
+      const before = await actions(s.laptop)
+      expect(await errorOf(db, `select perform_lifecycle_action('serialized_assets', $1, 'provide', 'Zz D1 Second Holder')`, [s.laptop])).toMatch(/Decommissioned.*refreshed/)
+      expect(await errorOf(db, `select perform_lifecycle_action('serialized_assets', $1, 'provide', 'Zz D1 Second Holder', 'note', false)`, [s.laptop])).toMatch(/refreshed/)
+      expect((await device(s.laptop)).status).toBe('decommissioned')
+      expect(await actions(s.laptop)).toEqual(before)
+      await rpc(db, `perform_lifecycle_action('serialized_assets', $1, 'provide', 'Zz D1 Second Holder', 'reimaged 10/21', true)`, [s.laptop])
+      expect(await device(s.laptop)).toMatchObject({ tbl: 'active_laptops_np', status: 'provided', assigned_to: 'Zz D1 Second Holder' })
+      expect((await actions(s.laptop)).filter((h) => h.action === 'provide').map((h) => h.detail)).toContain('Refresh confirmed — reimaged 10/21')
+      expect((await one(`select count(*)::int as n from equipment_issues where asset_id = $1 and status = 'open'`, [s.laptop])).n).toBe(1)
+    })
+  })
+
+  it('Retain (setting it aside) is not a back door: it needs the same confirmation', async () => {
+    await inRolledBackTx(db, async () => {
+      const s = await decommissioned('D2')
+      expect(await errorOf(db, `select perform_lifecycle_action('serialized_assets', $1, 'retain')`, [s.laptop])).toMatch(/refreshed/)
+      expect((await device(s.laptop)).status).toBe('decommissioned')
+      await rpc(db, `perform_lifecycle_action('serialized_assets', $1, 'retain', null, null, true)`, [s.laptop])
+      expect((await device(s.laptop)).status).toBe('retained')
+      expect((await actions(s.laptop)).find((h) => h.action === 'retain' && h.detail === 'Refresh confirmed')).toBeTruthy()
+    })
+  })
+
+  it('Swap with a Decommissioned replacement needs the confirmation; an Available one does not', async () => {
+    await inRolledBackTx(db, async () => {
+      const s = await decommissioned('D3')
+      const holder = await rpc<string>(db, `create_asset('serialized_assets', 'Dell', 'Laptop', 'D3-OLD')`)
+      await rpc(db, `perform_lifecycle_action('serialized_assets', $1, 'provide', 'Zz D3 Person')`, [holder])
+      const swap = (replacement: string, confirmed: boolean) =>
+        `select perform_swap('active_laptops_np', '${holder}', '${replacement}', 'broken screen'${confirmed ? ', true' : ''})`
+      expect(await errorOf(db, swap(s.laptop, false))).toMatch(/replacement is Decommissioned.*refreshed/i)
+      expect(await device(holder)).toMatchObject({ status: 'provided', assigned_to: 'Zz D3 Person' }) // untouched
+      await db.query(swap(s.laptop, true))
+      expect(await device(s.laptop)).toMatchObject({ status: 'provided', assigned_to: 'Zz D3 Person' })
+      expect((await actions(s.laptop)).some((h) => h.action === 'swap' && /Refresh confirmed/.test(h.detail ?? ''))).toBe(true)
+      // an Available replacement needs no confirmation
+      const spare = await rpc<string>(db, `create_asset('serialized_assets', 'Dell', 'Laptop', 'D3-SPARE')`)
+      await rpc(db, `perform_lifecycle_action('serialized_assets', $1, 'provide', 'Zz D3 Other')`, [spare])
+      const fresh = await rpc<string>(db, `create_asset('serialized_assets', 'Dell', 'Laptop', 'D3-FRESH')`)
+      await db.query(`select perform_swap('active_laptops_np', '${spare}', '${fresh}', 'upgrade')`)
+      expect(await device(fresh)).toMatchObject({ status: 'provided', assigned_to: 'Zz D3 Other' })
+    })
+  })
+
+  it('a Decommissioned device can be retired directly (Mark non-functional), and that is final: it can never be issued again', async () => {
+    await inRolledBackTx(db, async () => {
+      const s = await decommissioned('D4')
+      const onb = (await one<{ id: string }>(`insert into onboarding_checklists (employee_name, created_by) values ('Zz D4 New Hire', $1) returning id`, [ADMIN.id])).id
+      await rpc(db, `perform_lifecycle_action('serialized_assets', $1, 'mark_nonfunctional')`, [s.laptop])
+      expect((await device(s.laptop)).status).toBe('nonfunctional')
+      const gone = await device(s.laptop)
+      for (const [label, sql] of [
+        ['Provide (even confirmed)', `select perform_lifecycle_action('serialized_assets', '${s.laptop}', 'provide', 'Zz Anyone', null, true)`],
+        ['Retain (even confirmed)', `select perform_lifecycle_action('serialized_assets', '${s.laptop}', 'retain', null, null, true)`],
+        ['Transfer', `select perform_lifecycle_action('serialized_assets', '${s.laptop}', 'transfer', 'Zz Anyone')`],
+        ['Collect', `select perform_lifecycle_action('serialized_assets', '${s.laptop}', 'collect')`],
+        ['Mark repaired', `select perform_lifecycle_action('serialized_assets', '${s.laptop}', 'mark_repaired')`],
+        ['register issue', `select issue_equipment('${s.emp}', 'serialized_assets', '${s.laptop}')`],
+        ['onboarding assign by serial', `select onboarding_assign_device('${onb}', 'D4-LAP-1')`],
+      ] as const) {
+        expect(await errorOf(db, sql), label).not.toBeNull()
+      }
+      // as a swap replacement
+      const holder = await rpc<string>(db, `create_asset('serialized_assets', 'Dell', 'Laptop', 'D4-HOLDER')`)
+      await rpc(db, `perform_lifecycle_action('serialized_assets', $1, 'provide', 'Zz D4 Person')`, [holder])
+      expect(await errorOf(db, `select perform_swap('active_laptops_np', '${holder}', '${s.laptop}', 'x', true)`)).toMatch(/Replacement asset must be available or decommissioned \(currently nonfunctional\)/)
+      expect(await device(s.laptop)).toEqual(gone)
+    })
+  })
+
+  it('a Damaged device can still be marked non-functional as before; Available and Retained behave as before', async () => {
+    await inRolledBackTx(db, async () => {
+      const s = await scene('D5')
+      await rpc(db, `perform_lifecycle_action('serialized_assets', $1, 'mark_damaged')`, [s.laptop])
+      await rpc(db, `perform_lifecycle_action('serialized_assets', $1, 'mark_nonfunctional')`, [s.laptop])
+      expect((await device(s.laptop)).status).toBe('nonfunctional')
+      const a = await rpc<string>(db, `create_asset('serialized_assets', 'Dell', 'Laptop', 'D5-AV')`)
+      await rpc(db, `perform_lifecycle_action('serialized_assets', $1, 'retain')`, [a]) // Available -> Retained needs no confirmation
+      await rpc(db, `perform_lifecycle_action('serialized_assets', $1, 'provide', 'Zz D5 Person')`, [a]) // Retained -> Provided neither
+      expect((await device(a)).status).toBe('provided')
+      expect((await actions(a)).every((h) => !/Refresh confirmed/.test(h.detail ?? ''))).toBe(true)
+    })
+  })
+
+  it('onboarding assign by serial refuses a Decommissioned device (provide it from the device page instead)', async () => {
+    await inRolledBackTx(db, async () => {
+      const s = await decommissioned('D6')
+      const onb = (await one<{ id: string }>(`insert into onboarding_checklists (employee_name, created_by) values ('Zz D6 New Hire', $1) returning id`, [ADMIN.id])).id
+      expect(await errorOf(db, `select onboarding_assign_device($1, 'D6-LAP-1')`, [onb])).toMatch(/Decommissioned.*device page/)
+      expect((await device(s.laptop)).status).toBe('decommissioned')
+    })
+  })
+})
+
+describe.skipIf(isStaging)('Rollback of 035', () => {
+  it('restores the 033/034 functions exactly', async () => {
+    const fresh = await openDb()
+    try {
+      await applyUpTo(fresh, '20260901000035_decommissioned_guard_rails.sql')
+      const defs = async () =>
+        (await fresh.query<{ d: string }>(`select pg_get_functiondef(p.oid) as d from pg_proc p where p.proname in ('perform_lifecycle_action', 'perform_swap', 'onboarding_assign_device') order by p.proname, p.pronargs`)).rows.map((r) => r.d.replace(/\r\n/g, '\n'))
+      const before = await defs()
+      await applyMigration(fresh, '20260901000035_decommissioned_guard_rails.sql')
+      expect(await defs()).not.toEqual(before)
+      await applyRollback(fresh, '20260901000035_down.sql')
+      expect(await defs()).toEqual(before)
     } finally {
       await fresh.close()
     }

@@ -7,9 +7,12 @@ import type { AssetAction, AssetCollection, AssetStatus } from '../types/databas
  * action buttons the UI shows; the SQL function is the real gate.
  *
  * Semantic note: 'decommissioned' is NOT terminal — the device is refreshed
- * and re-enters the reissue pool (Provide/Retain/Mark damaged all resume).
- * 'nonfunctional' is the actual terminal state, and so is 'lost'
- * (20260901000025), which only offboarding's return_equipment can set.
+ * and re-enters the reissue pool (Provide/Retain/Mark damaged all resume),
+ * but only after an explicit "refreshed and fit to use" confirmation
+ * (needsRefreshConfirmation, 20260901000035). It can also be retired directly
+ * with Mark non-functional. 'nonfunctional' is the actual terminal state — it
+ * can never be issued again — and so is 'lost' (20260901000025), which only
+ * offboarding's return_equipment can set.
  */
 export const TRANSITIONS: Record<AssetStatus, Partial<Record<AssetAction, AssetStatus>>> = {
   available: {
@@ -36,6 +39,7 @@ export const TRANSITIONS: Record<AssetStatus, Partial<Record<AssetAction, AssetS
     provide: 'provided',
     retain: 'retained',
     mark_damaged: 'damaged',
+    mark_nonfunctional: 'nonfunctional',
   },
   nonfunctional: {},
   lost: {},
@@ -84,6 +88,23 @@ export function isTerminal(status: AssetStatus): boolean {
  */
 export function canSwap(status: AssetStatus): boolean {
   return status === 'provided'
+}
+
+/**
+ * A Decommissioned device re-enters stock (Provide), the set-aside shelf (Retain) or an employee's hands (Swap in)
+ * only after the user confirms it has been refreshed. The database enforces the same rule.
+ */
+export function needsRefreshConfirmation(status: AssetStatus, action: AssetAction | 'swap'): boolean {
+  return status === 'decommissioned' && (action === 'provide' || action === 'retain' || action === 'swap')
+}
+
+export const REFRESH_CONFIRMATION_LABEL = 'I confirm this device has been refreshed and is fit to use.'
+
+/** One line that says what a status means for reissuing, shown beside the status. */
+export function getStatusHint(status: AssetStatus): string | null {
+  if (status === 'decommissioned') return 'Decommissioned: it must be refreshed, and you must confirm that, before it is issued again.'
+  if (status === 'nonfunctional') return 'Non-functional: retired for good. It cannot be issued again.'
+  return null
 }
 
 /** Statuses a swap replacement candidate must have. */

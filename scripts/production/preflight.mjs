@@ -1,4 +1,4 @@
-// READ-ONLY preflight for applying migrations 021–030, 033 and 034 to a database
+// READ-ONLY preflight for applying migrations 021–030 and 033–035 to a database
 // (production). It never writes: everything runs inside a READ ONLY
 // transaction that is rolled back. It reports, per check, OK / INFO /
 // STOP (STOP = a migration would fail or needs a decision first).

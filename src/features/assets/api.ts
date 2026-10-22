@@ -126,18 +126,21 @@ export interface PerformActionInput {
   action: AssetAction
   assignedTo?: string | null
   detail?: string | null
+  /** Required by the database to Provide or Retain a Decommissioned device (it was refreshed and is fit to use). */
+  refreshConfirmed?: boolean
 }
 
 export function usePerformLifecycleAction(collection: AssetCollection) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async ({ assetId, action, assignedTo, detail }: PerformActionInput) => {
+    mutationFn: async ({ assetId, action, assignedTo, detail, refreshConfirmed }: PerformActionInput) => {
       const { data, error } = await supabase.rpc('perform_lifecycle_action', {
         p_collection: collection,
         p_asset_id: assetId,
         p_action: action,
         p_assigned_to: assignedTo ?? null,
         p_detail: detail ?? null,
+        p_refresh_confirmed: refreshConfirmed ?? false,
       })
       if (error) throw error
       // Provide/Collect/Decommission can move a laptop between Laptop
@@ -205,17 +208,20 @@ export interface SwapInput {
   oldAssetId: string
   newAssetId: string
   reason: string
+  /** Required when the replacement is Decommissioned. */
+  refreshConfirmed?: boolean
 }
 
 export function useSwap(collection: AssetCollection) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async ({ oldAssetId, newAssetId, reason }: SwapInput) => {
+    mutationFn: async ({ oldAssetId, newAssetId, reason, refreshConfirmed }: SwapInput) => {
       const { data, error } = await supabase.rpc('perform_swap', {
         p_collection: collection,
         p_old_asset_id: oldAssetId,
         p_new_asset_id: newAssetId,
         p_reason: reason,
+        p_refresh_confirmed: refreshConfirmed ?? false,
       })
       if (error) throw error
       // The replacement may have been picked up from the other table (see

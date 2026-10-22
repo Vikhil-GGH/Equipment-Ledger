@@ -5,8 +5,10 @@ import {
   ACTION_LABELS,
   ACTIONS_REQUIRING_ASSIGNEE,
   COLLECTION_BASE_PATH,
+  REFRESH_CONFIRMATION_LABEL,
   canSwap,
   getAllowedActions,
+  needsRefreshConfirmation,
 } from '../../lib/lifecycle'
 import { getErrorMessage } from '../../lib/errors'
 import { useAuth } from '../auth/useAuth'
@@ -32,6 +34,7 @@ export function ActionPanel({
   const [showSwap, setShowSwap] = useState(false)
   const [assignedTo, setAssignedTo] = useState('')
   const [detail, setDetail] = useState('')
+  const [refreshed, setRefreshed] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   if (role === 'viewer') return null
@@ -48,6 +51,7 @@ export function ActionPanel({
     setError(null)
     setAssignedTo(asset.assigned_to ?? '')
     setDetail('')
+    setRefreshed(false)
     setPendingAction(action)
   }
 
@@ -60,6 +64,7 @@ export function ActionPanel({
         action: pendingAction,
         assignedTo: ACTIONS_REQUIRING_ASSIGNEE.has(pendingAction) ? assignedTo : null,
         detail: detail || null,
+        refreshConfirmed: needsRefreshConfirmation(asset.status, pendingAction) ? refreshed : undefined,
       })
       setPendingAction(null)
       if (resultCollection !== collection) {
@@ -84,6 +89,7 @@ export function ActionPanel({
 
   if (pendingAction) {
     const needsAssignee = ACTIONS_REQUIRING_ASSIGNEE.has(pendingAction)
+    const needsRefresh = needsRefreshConfirmation(asset.status, pendingAction)
     return (
       <div className="card space-y-3">
         <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
@@ -108,6 +114,17 @@ export function ActionPanel({
           </span>
           <input value={detail} onChange={(e) => setDetail(e.target.value)} className="input" />
         </label>
+        {needsRefresh && (
+          <label className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-sm dark:border-amber-800 dark:bg-amber-900/20">
+            <input type="checkbox" className="mt-0.5" checked={refreshed} onChange={(e) => setRefreshed(e.target.checked)} />
+            <span>
+              <span className="font-medium">{REFRESH_CONFIRMATION_LABEL}</span>
+              <span className="block text-xs text-neutral-600 dark:text-neutral-400">
+                This device is Decommissioned. The confirmation is written into its history. If it is retired for good, cancel and use “Mark non-functional” instead.
+              </span>
+            </span>
+          </label>
+        )}
         {error && (
           <p role="alert" className="text-sm text-red-600 dark:text-red-400">
             {error}
@@ -119,7 +136,7 @@ export function ActionPanel({
           </button>
           <button
             className="btn-primary"
-            disabled={performAction.isPending || (needsAssignee && !assignedTo.trim())}
+            disabled={performAction.isPending || (needsAssignee && !assignedTo.trim()) || (needsRefresh && !refreshed)}
             onClick={() => void confirm()}
           >
             {performAction.isPending ? 'Saving…' : 'Confirm'}

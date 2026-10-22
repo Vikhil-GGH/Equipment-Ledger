@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom'
 import type { AssetCollection } from '../../types/database.types'
 import { StatusBadge } from './StatusBadge'
 import { ActionPanel } from './ActionPanel'
+import { getStatusHint } from '../../lib/lifecycle'
 import { useAsset, useAssetHistory } from './api'
 
 export function AssetDetailPage({
@@ -40,6 +41,7 @@ export function AssetDetailPage({
           </div>
           <StatusBadge status={asset.status} collection={collection} />
         </div>
+        {getStatusHint(asset.status) && <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">{getStatusHint(asset.status)}</p>}
 
         <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
           <div>

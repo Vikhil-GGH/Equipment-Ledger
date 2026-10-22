@@ -6,7 +6,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const PLAN_FIRST = '20260901000021'
-const PLAN_LAST = '20260901000034'
+const PLAN_LAST = '20260901000035'
 
 /** Migration files with comments stripped (so commented-out SQL never counts). */
 export function loadMigrations(migrationsDir, adaptationsDir) {
@@ -73,12 +73,14 @@ export async function runChecks(q, migrations) {
     ['029', `select to_regclass('public.bulk_import_receipts') is not null as e`],
     ['030', `select to_regclass('public.profile_access_history') is not null as e`],
     ['033', `select to_regprocedure('public.canonical_assignee(text)') is not null as e`],
+    ['035', `select to_regprocedure('public.perform_swap(asset_collection,uuid,uuid,text,boolean)') is not null as e`],
     ['034', `select coalesce(pg_get_functiondef(to_regprocedure('public.onboarding_assign_device(uuid,text,text,text,text)')) like '%v_pre_status%', false) as e`],
   ]
   const present = {}
   for (const [m, sql] of markers) present[m] = !!(await one(sql)).e
-  report('INFO', 'Objects present for migrations 022–034', Object.entries(present).map(([m, p]) => `${m}:${p ? 'yes' : 'no'}`).join(' '))
-  const ret = await one(`select pg_get_function_result(to_regprocedure('public.perform_lifecycle_action(asset_collection, uuid, asset_action, text, text)')) as r`)
+  report('INFO', 'Objects present for migrations 022–035', Object.entries(present).map(([m, p]) => `${m}:${p ? 'yes' : 'no'}`).join(' '))
+  // By name, any signature: 035 gave the function a sixth argument, and 021 is applied if it returns the collection.
+  const ret = await one(`select pg_get_function_result(p.oid) as r from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = 'perform_lifecycle_action' order by p.pronargs desc limit 1`)
   present['021'] = ret.r === 'asset_collection'
   if (ret.r === 'asset_collection') report('OK', '021 (Inventory ↔ Active Laptops moves)', 'applied', 'No fix-up needed.')
   else if (ret.r === 'void') report('STOP', '021 (Inventory ↔ Active Laptops moves)', 'not applied (returns void)', 'Apply 021 with supabase/adaptations/021_before_drop_changed_functions.sql in the same transaction.')

@@ -1,4 +1,4 @@
-# Production migration plan (021–030, 033, 034): draft, not approved
+# Production migration plan (021–030, 033–035): draft, not approved
 
 **Status:** nothing here has been run against production. Every checkpoint (CP) needs the owner's explicit approval; stop at any STOP or unexpected result. See also:
 - [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md): checklist per migration, preflight, decisions;
@@ -23,6 +23,8 @@
 | 030 | Import History written only by imports; Remove access; two-factor for admin powers | New columns/table | yes (refuses while any account is revoked) |
 | 033 | Reliability fixes ([RELIABILITY_FIXES_033.md](RELIABILITY_FIXES_033.md)): Bulk Stock unknown-item message, retained laptops, tidy assignee names, ambiguous names refused, Available-only issuing, one in-progress offboarding per employee | None (functions, one view, two small triggers) | yes (exact) |
 | 034 | Onboarding "Assign device" (by serial) follows the same rule as Provide on the device page: a set-aside device must be unassigned and have no open register issue ([RELIABILITY_FIXES_033.md](RELIABILITY_FIXES_033.md)) | None (one function) | yes (exact) |
+
+| 035 | Decommissioned guard rails: Provide / Retain / Swap-in of a Decommissioned device needs a recorded refresh confirmation; Decommissioned can be retired directly (Mark non-functional); onboarding assign-by-serial refuses Decommissioned ([DECISION_DECOMMISSIONED_DEVICES.md](DECISION_DECOMMISSIONED_DEVICES.md)) | None (three functions; two get a new argument) | yes (exact) |
 
 ## Approval checkpoints
 

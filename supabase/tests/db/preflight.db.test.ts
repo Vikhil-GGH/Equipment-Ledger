@@ -46,7 +46,7 @@ const stops = (rows: Row[]) => rows.filter((r) => r.status === 'STOP').map((r) =
 beforeAll(async () => {
   if (isStaging) return
   at020 = await build('20260901000021')
-  at030 = await build('20260901000035')
+  at030 = await build('20260901000036')
 }, 600_000)
 afterAll(async () => {
   await at020?.close()
@@ -54,10 +54,10 @@ afterAll(async () => {
 })
 
 describe('parsing the migrations', () => {
-  it('finds every name the plan drops (29 drops in 021–034, including the 021 adaptation)', () => {
-    const plan = migrations.filter((m: { version: string }) => m.version >= '20260901000021' && m.version <= '20260901000034')
+  it('finds every name the plan drops (31 drops in 021–035, including the 021 adaptation)', () => {
+    const plan = migrations.filter((m: { version: string }) => m.version >= '20260901000021' && m.version <= '20260901000035')
     const drops = plan.flatMap((m: { sql: string }) => dropsAndCreates(m.sql).drops)
-    expect(drops).toHaveLength(29)
+    expect(drops).toHaveLength(31)
     expect(drops).toContainEqual({ kind: 'function', name: 'commit_bulk_import', args: 'text, jsonb' })
     expect(drops).toContainEqual({ kind: 'constraint', name: 'onboarding_checklists_assigned_asset_id_fkey', table: 'onboarding_checklists' })
   })
@@ -67,7 +67,7 @@ describe.skipIf(isStaging)('preflight against a database at 020 (production befo
   it('only the expected 021 fix-up is a STOP; every dropped name is present; no drift', async () => {
     const rows = await checks(at020)
     expect(stops(rows)).toEqual(['021 (Inventory ↔ Active Laptops moves)'])
-    expect(get(rows, 'Pending in the plan').value).toBe('021, 022, 023, 024, 025, 026, 027, 028, 029, 030, 033, 034')
+    expect(get(rows, 'Pending in the plan').value).toBe('021, 022, 023, 024, 025, 026, 027, 028, 029, 030, 033, 034, 035')
     expect(get(rows, 'Objects the pending migrations drop by name')).toMatchObject({ status: 'OK', value: 'all present' })
     expect(get(rows, 'Policies not created by any migration').status).toBe('OK')
     expect(get(rows, 'API-callable SECURITY DEFINER functions').status).toBe('OK')
@@ -101,11 +101,11 @@ describe.skipIf(isStaging)('preflight against a database at 020 (production befo
     }))
 })
 
-describe.skipIf(isStaging)('preflight against a fully migrated database (034)', () => {
+describe.skipIf(isStaging)('preflight against a fully migrated database (035)', () => {
   it('nothing pending, nothing blocks', async () => {
     const rows = await checks(at030)
-    expect(stops(rows)).toEqual([])
+    expect(stops(rows), JSON.stringify(rows.filter((r) => r.status === "STOP"))).toEqual([])
     expect(get(rows, 'Pending in the plan').value).toBe('none')
-    expect(get(rows, 'Objects present for migrations 022–034').value).not.toContain(':no')
+    expect(get(rows, 'Objects present for migrations 022–035').value).not.toContain(':no')
   })
 })

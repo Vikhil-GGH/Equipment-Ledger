@@ -18,7 +18,7 @@ const EXPECTED: Record<AssetStatus, AssetAction[]> = {
   provided: ['collect', 'transfer', 'mark_damaged', 'decommission'],
   retained: ['provide', 'mark_damaged'],
   damaged: ['mark_repaired', 'mark_nonfunctional'],
-  decommissioned: ['provide', 'retain', 'mark_damaged'],
+  decommissioned: ['provide', 'retain', 'mark_damaged', 'mark_nonfunctional'],
   nonfunctional: [],
   lost: [],
 }
