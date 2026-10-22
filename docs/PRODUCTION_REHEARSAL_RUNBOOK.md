@@ -17,7 +17,24 @@ PREFLIGHT_DB_URL='postgresql://…' PREFLIGHT_DB_SSL_CA=certs/supabase-prod-ca.c
 ```
 It never writes (one `READ ONLY` transaction, rolled back) and verifies the server certificate. It reports which of 021–034 are already applied, STOPs on anything a migration would trip over (hand-made objects, shared emails/serials/Bulk Stock names), and lists the admins and their authenticators. Decisions are made only on the real findings. **Send back the report; it contains no secrets.**
 
-## Step 2: a restore-tested backup
+## Step 2 (current): the verified production backup and the rehearsal
+**Backup (read-only on the database; writes a NEW local folder):**
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\production\run-preflight.ps1 -Task backup -OutDir "$env:USERPROFILE\EquipmentLedger-prod-backup-2026-10-22"
+```
+- One REPEATABLE READ, READ ONLY transaction: every table is read at the same instant. TLS verified; nothing written to the database.
+- The folder (outside the repository, refused otherwise) holds `data.json` (all rows), `signature.json` (the complete schema), `manifest.json` (row counts, per-table content hashes, migration history, SHA-256 of the files) and `SHA256SUMS.txt`. It contains personal data: keep it on an encrypted disk (BitLocker), never in the repository, chat or email.
+- It verifies itself (files re-read, SHA-256, every table's row count); you can re-check with `Get-FileHash`.
+- Also note the Supabase dashboard restore point (Database > Backups) as the second recovery path.
+
+**Rehearsal on the restored copy (offline, no network):**
+```powershell
+$env:REHEARSAL_DIR = "$env:USERPROFILE\EquipmentLedger-prod-backup-2026-10-22"; $env:REHEARSAL_PRESENT = "16"
+node node_modules\vitest\vitest.mjs run --config vitest.db.config.ts supabase/tests/db/production-backup-rehearsal.db.test.ts
+```
+It requires, in order: files intact; production's schema **identical** to the expected 001–014 + 016; restored rows identical (count and content hash per table); the plan equals production's; **no pre-existing column of any pre-existing row changes at any of the 18 steps**; the final schema equals a clean build; rollbacks 035 to 029 applied in reverse leave rows untouched and the schema equal to the state after 028. Going back further is deliberately not automatic: 029 keeps a private backup table of employee history (a rollback never deletes data), which blocks dropping 028's types; that would be a deliberate, approved removal, and the restore point covers it.
+
+## Step 2 (earlier text, kept for reference): a restore-tested backup
 Follow "Backups: encrypted handling" in the migration plan. For the rehearsal below the most convenient file is the app's own **Export backup** (Data page, signed in with the two-factor code): a single JSON with every table, verified complete by the app (it refuses to write a partial file). Handle it as confidential: encrypted disk, never in the repository, chat or email.
 
 ## Step 3: rehearse on a copy (no network, on the trusted machine)

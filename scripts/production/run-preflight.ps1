@@ -3,13 +3,14 @@
 #   powershell -ExecutionPolicy Bypass -File scripts\production\run-preflight.ps1               (the preflight)
 #   powershell -ExecutionPolicy Bypass -File scripts\production\run-preflight.ps1 -Task probe    (which of 015-020 are in place + duplicate-serial facts)
 #   powershell -ExecutionPolicy Bypass -File scripts\production\run-preflight.ps1 -Task plan     (the migration plan the applier would follow; still read-only)
+#   powershell -ExecutionPolicy Bypass -File scripts\production\run-preflight.ps1 -Task backup -OutDir D:\secure\ledger-prod-backup   (read-only; writes a NEW local folder outside the repository)
 #
 # - The password is typed at a hidden prompt (not echoed, not stored in the shell history).
 # - It is placed in process environment variables for the duration of the run only, then removed.
 # - Nothing is written to disk or to the repository; each task opens ONE read-only transaction
 #   (verified TLS, rolled back) and prints a report that contains no secrets. Copy the report and share it.
 # - The connection details below are the production project's session pooler (public information).
-param([ValidateSet('preflight', 'probe', 'plan')][string]$Task = 'preflight')
+param([ValidateSet('preflight', 'probe', 'plan', 'backup')][string]$Task = 'preflight', [string]$OutDir = '')
 
 $ErrorActionPreference = 'Stop'
 $projectRef = 'jhwhftaffsjulrvtajnl'
@@ -37,6 +38,7 @@ try {
     'preflight' { node scripts\production\preflight.mjs }
     'probe'     { node scripts\production\probe-state.mjs }
     'plan'      { node scripts\production\apply-migration.mjs --confirm-project $projectRef }   # no --execute: read-only
+    'backup'    { if (-not $OutDir) { throw 'Give -OutDir <a NEW folder outside the repository>.' }; node scripts\production\backup-production.mjs --out $OutDir }
   }
   $exit = $LASTEXITCODE
   Write-Host ''

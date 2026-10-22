@@ -13,6 +13,11 @@
 | 4 duplicate-serial groups / 8 devices | Information for 027, which keeps and lists them |
 | Admin MFA 0 of 1 | Needs the steps below |
 
+## 0. Confirmed by the probe and plan (read-only, exit 0)
+Production is **001–014 plus 016 only**. In place but unrecorded: **016** (monitors table, view, policies, trigger). **Absent: 015** (the enum value `monitors` is missing although the table exists), **017** (`handle_new_user` does not mention `is_anonymous`), **018** (enum value `other_equipment`), **019** (the whole other_equipment collection) and **020** (`restore_backup`). The plan is therefore: apply 015, record 016, apply 017–020, then 021–030, 033–035 (18 steps, in that order).
+
+The unusual 015/016 order (the table exists without its enum value) is safe in principle, because 015 only adds an enum value and nothing in 016 uses it, but it means production's Monitors table was hand-made. **That is why the backup captures the full schema, and the rehearsal requires production's schema to equal the expected one exactly** (any hand-made difference in columns, defaults, policies, triggers, functions or indexes stops the rehearsal and is reported).
+
 ## 1. Why 015–020 are missing from history, and what exists
 Production was built partly by hand, not purely from these files. Migration 017's own header says its text cannot create a user and that "production evidently runs a working version". So 015, 016 (and possibly 017, 018, 020) were applied outside the CLI and never recorded. The report proves 015/016 in place and 019 absent. **017, 018 and 020 are not settled by the report**: run the probe below (read-only). Either way the plan handles every combination.
 
