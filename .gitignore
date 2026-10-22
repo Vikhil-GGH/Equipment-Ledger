@@ -41,3 +41,5 @@ supabase/.temp
 
 # Database CA certificates (docs/DATABASE_SSL.md) — chosen per environment
 certs/
+
+release-dist/

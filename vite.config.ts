@@ -47,12 +47,16 @@ function checkStagingEnv(root: string): void {
 export default defineConfig(({ mode, command }) => {
   const root = process.cwd()
   const isStaging = mode === 'staging'
+  // Where the app is served from: '/' (own domain, Vercel) or '/Equipment-Ledger/' (GitHub Pages project site).
+  const base = loadEnv(mode, root, 'VITE_').VITE_BASE || '/'
+  if (!/^\/([\w.-]+\/)*$/.test(base)) throw new Error(`VITE_BASE must start and end with "/" (got "${base}")`)
   if (isStaging && command === 'build') {
     throw new Error('Staging builds are disabled: staging is for local testing only and must never be deployed.')
   }
   if (isStaging) checkStagingEnv(root)
 
   return {
+    base,
     define: {
       __PROD_PROJECT_REF__: JSON.stringify(projectRef(loadEnv('production', root, 'VITE_').VITE_SUPABASE_URL)),
     },
@@ -70,12 +74,14 @@ export default defineConfig(({ mode, command }) => {
           theme_color: '#0f172a',
           background_color: '#0f172a',
           display: 'standalone',
-          start_url: '/',
+          // Relative to the app's own address, so the same build works at '/' or under a sub-path.
+          start_url: base,
+          scope: base,
           icons: [
-            { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-            { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+            { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+            { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
             {
-              src: '/icons/maskable-512.png',
+              src: 'icons/maskable-512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',
