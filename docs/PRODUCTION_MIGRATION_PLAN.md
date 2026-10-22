@@ -51,7 +51,11 @@
    - point-in-time recovery or daily backups on, and the latest restore point noted.
 3. **Admins:** decide who the two admins are (D3). Admin powers need a two-factor session from 030, so each admin enrols an authenticator on the Security page right after the frontend is deployed (step 5 below). If an admin's password may be known to anyone else, reset it first.
 
-## Migration process: Supabase CLI (preferred)
+## Migration process: the guarded applier (replaces the CLI route for this release)
+
+The preflight showed production's history (001–014) does not match its schema (015–016 in place, 019 missing), and the CLI cannot run the 021 adaptation in the same transaction. Use `scripts/production/apply-migration.mjs` instead (launcher: `scripts\production\run-preflight.ps1`): see [PRODUCTION_PREFLIGHT_FINDINGS.md](PRODUCTION_PREFLIGHT_FINDINGS.md) for the findings and the corrected sequence. The CLI text below is kept for reference only.
+
+## Migration process: Supabase CLI (reference only, not used for this release)
 
 The same per-migration transaction and history table as staging. **Validate on staging first, read-only:** does `supabase migration list` show staging's history (recorded by our runner) correctly?
 

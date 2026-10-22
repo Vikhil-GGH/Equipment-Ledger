@@ -9,6 +9,8 @@ The chain to apply is **021–030, 033 and 034** (whatever the preflight shows a
 - 033 and 034 are applied on hosted staging with row-level comparison, SQL (73), verification (16/16), smoke (51/51) and browser tests passing.
 - Excel import, duplicate handling and screen lists are tested beyond 1,000 rows (below).
 
+> **Update:** the preflight has been run; see [PRODUCTION_PREFLIGHT_FINDINGS.md](PRODUCTION_PREFLIGHT_FINDINGS.md). Next read-only steps: `run-preflight.ps1 -Task probe`, then `-Task plan`.
+
 ## Step 1: the read-only preflight (the owner runs it, from a trusted machine)
 ```
 PREFLIGHT_DB_URL='postgresql://…' PREFLIGHT_DB_SSL_CA=certs/supabase-prod-ca.crt node scripts/production/preflight.mjs
