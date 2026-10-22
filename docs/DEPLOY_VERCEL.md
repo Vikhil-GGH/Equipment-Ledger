@@ -21,7 +21,7 @@ Never set a `service_role` key, a database password or any staging value here. S
 **4. Node version.** `package.json` pins `engines.node >= 22.12` (what the build tool needs); Vercel reads it.
 
 ## Cutover order (summary)
-Migrations are applied and verified first (one at a time, with the rollback ready) → push the release branch → deploy the build from that exact commit → admins enrol an authenticator → smoke checks. The old app and the new database schema are not compatible in either direction, so there is a maintenance freeze between the first migration and the deployment.
+Migrations are applied and verified first (one at a time, with the rollback ready) → push the release branch → deploy the build from that exact commit → admins enrol an authenticator → smoke checks. Recovery is coordinated as described in [DEPLOY_GITHUB_PAGES.md](DEPLOY_GITHUB_PAGES.md) (GitHub Pages is the chosen host; this file is for a possible later move).
 
 ## Not included on purpose
 A strict Content-Security-Policy: it needs testing against the camera scanner and the Supabase endpoints in a preview first. Add it after the first deployment as its own change.

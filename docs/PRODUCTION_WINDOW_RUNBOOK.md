@@ -14,8 +14,9 @@ Backup `…\EquipmentLedger-prod-backup-2026-10-22` (taken 2026-10-22, 12 tables
 
 ## Before the window (all read-only or preparation)
 1. Supabase Dashboard: Authentication > Providers: **TOTP multi-factor ON**; sign-ups as decided; **anonymous sign-ins OFF**. Database > Backups: note the latest restore point (second recovery path).
-2. The new app is **ready to deploy** (Vercel project and branch prepared; see [DEPLOY_VERCEL.md](DEPLOY_VERCEL.md)). The old app and the migrated database are not compatible, so there is downtime between the first migration and the deployment: keep it short.
-3. Tell the other users: **freeze**: no edits, imports, onboarding or offboarding during the window.
+2. The new app is **ready to deploy** (the local `gh-pages` branch holds the verified build; see [DEPLOY_GITHUB_PAGES.md](DEPLOY_GITHUB_PAGES.md)). The live Pages app does not use the database, so the migrations cause no outage for it; the freeze covers anyone using the new app against production, and it **continues until the validation after the deploy passes** (that is the point of no return; recovery after it is forward).
+3. Confirm the Supabase **restore point** exists (plan, Point-in-Time Recovery, latest backup time): it is the only database rollback before the point of no return beyond the verified 035 to 029 rollbacks.
+4. Tell the other users: **freeze**: no edits, imports, onboarding or offboarding during the window.
 
 ## The window
 Let `$B = "$env:USERPROFILE\EquipmentLedger-prod-backup-2026-10-22"`.
